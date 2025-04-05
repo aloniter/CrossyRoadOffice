@@ -106,49 +106,23 @@
         // --- Texture Generation Functions ---
         function createNoiseTexture(width, height, color1, color2, alpha = 1) { /* ... */ const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; const ctx = canvas.getContext('2d'); ctx.fillStyle = color1; ctx.fillRect(0, 0, width, height); const imageData = ctx.getImageData(0, 0, width, height); const data = imageData.data; for (let i = 0; i < data.length; i += 4) { if (Math.random() > 0.85) { const shade = Math.random() * 50 + (color2 === '#000000' ? 0 : 205); data[i] = shade; data[i + 1] = shade; data[i + 2] = shade; } data[i + 3] = alpha * 255; } ctx.putImageData(imageData, 0, 0); const texture = new THREE.CanvasTexture(canvas); texture.wrapS = texture.wrapT = THREE.RepeatWrapping; return texture; }
         function createTileTexture(width, height, bgColor, lineColor, tileSize) { /* ... */ const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; const ctx = canvas.getContext('2d'); ctx.fillStyle = bgColor; ctx.fillRect(0, 0, width, height); ctx.strokeStyle = lineColor; ctx.lineWidth = Math.max(1, Math.floor(width / 100)); ctx.beginPath(); for (let x = 0; x <= width; x += tileSize) { ctx.moveTo(x, 0); ctx.lineTo(x, height); } for (let y = 0; y <= height; y += tileSize) { ctx.moveTo(0, y); ctx.lineTo(width, y); } ctx.stroke(); const texture = new THREE.CanvasTexture(canvas); texture.wrapS = texture.wrapT = THREE.RepeatWrapping; return texture; }
-        // --- Texture Function for Conveyor Belts ---
-        // --- *** FIXED *** Undefined 'y' variable ---
+        // Texture Function for Conveyor Belts (Fixed)
         function createConveyorTexture(width, height, bgColor, arrowColor, direction = 'right') {
             const canvas = document.createElement('canvas');
             canvas.width = width;
             canvas.height = height;
             const ctx = canvas.getContext('2d');
-
-            // Background
-            ctx.fillStyle = bgColor;
-            ctx.fillRect(0, 0, width, height);
-
-            // Draw arrows
-            ctx.fillStyle = arrowColor;
-            const arrowSize = height * 0.5; // Size of the arrow relative to texture height
-            const spacing = width / 2; // Spacing between arrows
-            const arrowCenterY = height / 2; // Define Y center
+            ctx.fillStyle = bgColor; ctx.fillRect(0, 0, width, height); // Background
+            ctx.fillStyle = arrowColor; // Arrow Color
+            const arrowSize = height * 0.5; const spacing = width / 2; const arrowCenterY = height / 2; // Use defined Y center
 
             for (let x = spacing / 2; x < width; x += spacing) {
-                ctx.save(); // Save context state
-                ctx.translate(x, arrowCenterY); // Move origin to arrow center
-
-                ctx.beginPath();
-                if (direction === 'right') {
-                    // Draw right-pointing triangle
-                    ctx.moveTo(-arrowSize / 2, -arrowSize / 2); // Top-left point
-                    ctx.lineTo(arrowSize / 2, 0);           // Right point
-                    ctx.lineTo(-arrowSize / 2, arrowSize / 2);  // Bottom-left point
-                } else { // left
-                    // Draw left-pointing triangle
-                    ctx.moveTo(arrowSize / 2, -arrowSize / 2);  // Top-right point
-                    ctx.lineTo(-arrowSize / 2, 0);          // Left point
-                    ctx.lineTo(arrowSize / 2, arrowSize / 2);   // Bottom-right point
-                }
-                ctx.closePath();
-                ctx.fill();
-
-                ctx.restore(); // Restore context state (including translation)
+                ctx.save(); ctx.translate(x, arrowCenterY); ctx.beginPath();
+                if (direction === 'right') { ctx.moveTo(-arrowSize / 2, -arrowSize / 2); ctx.lineTo(arrowSize / 2, 0); ctx.lineTo(-arrowSize / 2, arrowSize / 2); }
+                else { ctx.moveTo(arrowSize / 2, -arrowSize / 2); ctx.lineTo(-arrowSize / 2, 0); ctx.lineTo(arrowSize / 2, arrowSize / 2); }
+                ctx.closePath(); ctx.fill(); ctx.restore();
             }
-
-            const texture = new THREE.CanvasTexture(canvas);
-            texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-            return texture;
+            const texture = new THREE.CanvasTexture(canvas); texture.wrapS = texture.wrapT = THREE.RepeatWrapping; return texture;
         }
 
         // --- Leaderboard Functions (Unchanged) ---
@@ -168,67 +142,58 @@
         function preloadAssets() {
             console.log("Preloading assets...");
             let maxAnisotropy = renderer ? renderer.capabilities.getMaxAnisotropy() : 1;
+            const loadingManager = new THREE.LoadingManager(); // Optional: Use manager for better tracking
 
-            // Load Character & Obstacle Textures (Unchanged logic)
+            // --- Use Loading Manager for Texture Loader ---
+             textureLoader = new THREE.TextureLoader(loadingManager); // Associate loader with manager
+
+            // Load Character Textures
             CHARACTERS.forEach((char, index) => { if (char.imageUrl) { characterTextures[index] = textureLoader.load(char.imageUrl, (texture) => { texture.magFilter = THREE.NearestFilter; texture.anisotropy = maxAnisotropy; texture.needsUpdate = true; }, undefined, (err) => console.error(`Failed texture: ${char.name}`, err) ); } });
+            // Load Obstacle Textures
             for (const type in OBSTACLE_IMAGES) { const imageUrl = OBSTACLE_IMAGES[type]; obstacleTextures[type] = textureLoader.load(imageUrl, (texture) => { texture.magFilter = THREE.NearestFilter; texture.anisotropy = maxAnisotropy; texture.needsUpdate = true; }, undefined, (err) => console.error(`Failed texture: ${type}`, err) ); }
 
-            // --- Standard Lane Materials (Keep adjusted colors) ---
+            // Generate Procedural Textures (These are synchronous)
             const carpetTexture = createNoiseTexture(64, 64, '#90EE90', '#3CB371');
-            carpetTexture.repeat.set(8, 8);
-            laneMaterials[LANE_TYPES.CARPET] = new THREE.MeshStandardMaterial({ map: carpetTexture, roughness: 0.9, metalness: 0.05 });
+            carpetTexture.repeat.set(8, 8); laneMaterials[LANE_TYPES.CARPET] = new THREE.MeshStandardMaterial({ map: carpetTexture, roughness: 0.9, metalness: 0.05 });
             const walkwayTexture = createTileTexture(64, 64, '#E07A5F', '#D45D3D', 24);
-            walkwayTexture.repeat.set(8, 8);
-            laneMaterials[LANE_TYPES.WALKWAY] = new THREE.MeshStandardMaterial({ map: walkwayTexture, roughness: 0.4, metalness: 0.1 });
-
-            // --- Lane Materials for New Types ---
-            // Conveyor Left
-            const conveyorLeftTexture = createConveyorTexture(64, 64, '#A9A9A9', '#FFFFFF', 'left'); // DarkGray background, White arrows
-            conveyorLeftTexture.repeat.set(10, 1); // Repeat more horizontally
-            laneMaterials[LANE_TYPES.CONVEYOR_LEFT] = new THREE.MeshStandardMaterial({ map: conveyorLeftTexture, roughness: 0.6, metalness: 0.3 });
-            // Conveyor Right
+            walkwayTexture.repeat.set(8, 8); laneMaterials[LANE_TYPES.WALKWAY] = new THREE.MeshStandardMaterial({ map: walkwayTexture, roughness: 0.4, metalness: 0.1 });
+            const conveyorLeftTexture = createConveyorTexture(64, 64, '#A9A9A9', '#FFFFFF', 'left');
+            conveyorLeftTexture.repeat.set(10, 1); laneMaterials[LANE_TYPES.CONVEYOR_LEFT] = new THREE.MeshStandardMaterial({ map: conveyorLeftTexture, roughness: 0.6, metalness: 0.3 });
             const conveyorRightTexture = createConveyorTexture(64, 64, '#A9A9A9', '#FFFFFF', 'right');
-            conveyorRightTexture.repeat.set(10, 1);
-            laneMaterials[LANE_TYPES.CONVEYOR_RIGHT] = new THREE.MeshStandardMaterial({ map: conveyorRightTexture, roughness: 0.6, metalness: 0.3 });
-            // Wet Floor
-            const wetFloorTexture = createNoiseTexture(64, 64, '#B0C4DE', '#778899', 0.8); // LightSteelBlue, LightSlateGray, slightly transparent
-            wetFloorTexture.repeat.set(8, 8);
-            laneMaterials[LANE_TYPES.WET_FLOOR] = new THREE.MeshStandardMaterial({ map: wetFloorTexture, roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.9 }); // Shinier, more transparent
-            // Safe Zone (Simple light green)
-            laneMaterials[LANE_TYPES.SAFE_ZONE] = new THREE.MeshStandardMaterial({ color: 0x98FB98, roughness: 0.9, metalness: 0.0 }); // PaleGreen
+            conveyorRightTexture.repeat.set(10, 1); laneMaterials[LANE_TYPES.CONVEYOR_RIGHT] = new THREE.MeshStandardMaterial({ map: conveyorRightTexture, roughness: 0.6, metalness: 0.3 });
+            const wetFloorTexture = createNoiseTexture(64, 64, '#B0C4DE', '#778899', 0.8);
+            wetFloorTexture.repeat.set(8, 8); laneMaterials[LANE_TYPES.WET_FLOOR] = new THREE.MeshStandardMaterial({ map: wetFloorTexture, roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.9 });
+            laneMaterials[LANE_TYPES.SAFE_ZONE] = new THREE.MeshStandardMaterial({ color: 0x98FB98, roughness: 0.9, metalness: 0.0 });
 
-            // Wall Material (Keep adjusted color)
+            // Wall & Scenery Materials (Synchronous)
             wallMaterial = new THREE.MeshStandardMaterial({ color: 0xFFEBCD, roughness: 0.9, metalness: 0.0 });
-
-            // Scenery Materials (Unchanged)
             sceneryMaterials.desk = new THREE.MeshStandardMaterial({ color: SCENERY_COLORS.DESK, roughness: 0.8, metalness: 0.1 });
             sceneryMaterials.plantPot = new THREE.MeshStandardMaterial({ color: SCENERY_COLORS.PLANT_POT, roughness: 0.7, metalness: 0.1 });
             sceneryMaterials.plantLeaf = new THREE.MeshStandardMaterial({ color: SCENERY_COLORS.PLANT_LEAF, roughness: 0.8, metalness: 0.0 });
 
+             // Optional: Loading Manager Callbacks
+             loadingManager.onLoad = () => {
+                 console.log('All external assets loaded!');
+                 // You could enable the start button here if it was disabled
+             };
+             loadingManager.onError = (url) => {
+                 console.error('There was an error loading ' + url);
+             };
+
             console.log("Asset preloading & generation initiated.");
          }
 
-        // --- Initialization (Keep adjusted camera/walls) ---
+        // --- Initialization (Unchanged) ---
         function init() {
-            // Get DOM Elements (Unchanged)
             infoElement = document.getElementById('info'); mainMenuElement = document.getElementById('mainMenu'); scoreboardScreenElement = document.getElementById('scoreboardScreen'); gameOverElement = document.getElementById('gameOver'); characterButtonsElement = document.getElementById('characterButtons'); startGameButton = document.getElementById('startGameButton'); viewScoresButton = document.getElementById('viewScoresButton'); backToMenuButton = document.getElementById('backToMenuButton'); scoreListElement = document.getElementById('scoreList'); noScoresMessageElement = document.getElementById('noScoresMessage'); finalScoreElement = document.getElementById('finalScore'); gameOverReasonElement = document.getElementById('gameOverReason');
-
-            // Scene Setup (No background/fog)
             scene = new THREE.Scene();
-
-            // Camera (Keep adjusted position)
             camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 15, 12);
-            camera.lookAt(0, 0, 0);
-
-            // Renderer Setup (Keep alpha: true)
+            camera.position.set(0, 15, 12); camera.lookAt(0, 0, 0);
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
             document.body.appendChild(renderer.domElement);
             renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
-
-            // Lighting Setup (Keep adjusted light pos/shadows)
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); scene.add(ambientLight);
             const hemiLight = new THREE.HemisphereLight( 0xE8E8FF, 0xB0B0B0, 0.6 ); scene.add( hemiLight );
             const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
@@ -238,11 +203,7 @@
             directionalLight.shadow.camera.left = -60; directionalLight.shadow.camera.right = 60;
             directionalLight.shadow.camera.top = 60; directionalLight.shadow.camera.bottom = -60;
             directionalLight.shadow.bias = -0.002; scene.add(directionalLight);
-
-            // Preload Assets
-            preloadAssets();
-
-            // Wall Creation (Keep adjusted size/position)
+            preloadAssets(); // Call preload
             const wallHeight = 8; const wallThickness = 1.0; const wallLength = 400;
             const wallGeometry = new THREE.BoxGeometry(wallThickness, wallHeight, wallLength);
             const wallXOffset = laneLength / 2 + wallThickness / 2;
@@ -253,234 +214,158 @@
             const rightWall = new THREE.Mesh(wallGeometry, wallMaterial);
             rightWall.position.set(wallXOffset, wallHeight / 2, wallZCenter);
             rightWall.receiveShadow = true; scene.add(rightWall);
-
-            // UI Setup (Unchanged logic)
             if (characterButtonsElement) populateCharacterButtons(); else console.error("characterButtonsElement not found!");
             if (startGameButton) startGameButton.onclick = startGame; else console.error("startGameButton not found!");
             if (viewScoresButton) viewScoresButton.onclick = () => { displayHighScoresOnScreen(); currentGameState = GAME_STATE.SHOW_SCORES; showOverlay(scoreboardScreenElement); }; else console.error("viewScoresButton not found!");
             if (backToMenuButton) backToMenuButton.onclick = goToMenu; else console.error("backToMenuButton not found!");
-
-            // Event Listeners
             window.addEventListener('resize', onWindowResize, false);
             document.addEventListener('keydown', onKeyDown, false);
-
-            // Initial State
             goToMenu();
             animate();
          }
 
         // --- Game Start Logic (Unchanged) ---
-        function startGame() { /* ... */ console.log("Starting game..."); score = 0; playerPosition = { x: 0, z: 0 }; targetPlayerPosition = { x: 0, z: 0 }; lastLaneZ = 0; isMoving = false; infoElement.innerText = `Score: ${score}`; lastMoveTime = clock.elapsedTime; clearGameObjects(); createPlayer(); createLane(LANE_TYPES.SAFE_ZONE, 0); // Start on a safe zone for fairness for (let i = 1; i < generationDistance; i++) generateLane(); camera.position.set(0, 15, 12); camera.lookAt(0, 0, 0); currentGameState = GAME_STATE.PLAYING; showOverlay(null); infoElement.classList.remove('hidden'); if (!clock.running) clock.start(); if (!animationFrameId) animate(); }
+        function startGame() {
+            console.log("Starting game...");
+            // Optional: Add a check here if using a loading flag
+            // if (!assetsLoaded) { console.log("Assets not loaded yet!"); return; }
+
+            score = 0; playerPosition = { x: 0, z: 0 }; targetPlayerPosition = { x: 0, z: 0 };
+            lastLaneZ = 0; isMoving = false;
+            infoElement.innerText = `Score: ${score}`;
+            lastMoveTime = clock.elapsedTime;
+            clearGameObjects();
+            createPlayer(); // Create player *after* potentially checking asset load state
+            createLane(LANE_TYPES.SAFE_ZONE, 0);
+            for (let i = 1; i < generationDistance; i++) generateLane();
+            camera.position.set(0, 15, 12); camera.lookAt(0, 0, 0);
+            currentGameState = GAME_STATE.PLAYING;
+            showOverlay(null); infoElement.classList.remove('hidden');
+            if (!clock.running) clock.start();
+            if (!animationFrameId) animate(); // Ensure animation loop starts if stopped
+        }
 
         // --- Clear Game Objects (Unchanged) ---
         function clearGameObjects() { /* ... */ console.log("Clearing game objects..."); for (let i = obstacles.length - 1; i >= 0; i--) if (obstacles[i].mesh.parent) scene.remove(obstacles[i].mesh); obstacles = []; for (let i = lanes.length - 1; i >= 0; i--) if (lanes[i].mesh.parent) scene.remove(lanes[i].mesh); lanes = []; for (let i = scenery.length - 1; i >= 0; i--) if (scenery[i].parent) scene.remove(scenery[i]); scenery = []; if (player && player.parent) scene.remove(player); player = null; playerBoundingBox = null; }
 
         // --- Create Player ---
+        // --- *** FIXED *** Added fallback for unloaded textures ---
         function createPlayer() {
             const character = CHARACTERS[selectedCharacterIndex];
             const playerW = character.width; const playerH = character.height;
             const playerBaseY = playerH / 2;
             let playerMaterial, playerGeometry;
+            let useDefault = false; // Flag to use default material/geometry
 
-            if (character.imageUrl && characterTextures[selectedCharacterIndex]) {
+            // Check if image character is selected AND texture is loaded
+            if (character.imageUrl && (!characterTextures[selectedCharacterIndex] || !characterTextures[selectedCharacterIndex].image)) {
+                 console.warn(`Texture for ${character.name} not ready, using default.`);
+                 useDefault = true; // Texture not ready, force default
+            }
+
+            if (character.imageUrl && !useDefault) {
+                // Use Plane with Texture
                 playerGeometry = new THREE.PlaneGeometry(playerW, playerH);
                 playerMaterial = new THREE.MeshBasicMaterial({ map: characterTextures[selectedCharacterIndex], transparent: true, side: THREE.DoubleSide });
+                console.log(`Using texture for ${character.name}`);
             } else {
-                playerGeometry = new THREE.BoxGeometry(playerW, playerH, playerW * 0.8);
+                // Use Default Box
+                const defaultChar = CHARACTERS.find(c => !c.imageUrl) || { width: 2.2, height: 2.2 }; // Find default or use fallback size
+                playerGeometry = new THREE.BoxGeometry(defaultChar.width, defaultChar.height, defaultChar.width * 0.8);
                 playerMaterial = new THREE.MeshStandardMaterial({ color: DEFAULT_PLAYER_COLOR, roughness: 0.6 });
+                console.log(`Using default cube for ${character.name}`);
             }
+
             player = new THREE.Mesh(playerGeometry, playerMaterial);
             player.position.set(playerPosition.x, playerBaseY, playerPosition.z);
             player.castShadow = true; player.receiveShadow = false;
-            // Store current lane type
-            player.userData.currentLaneType = null; // Initialize
-            player.userData.currentLaneZ = 0; // Initialize
+            player.userData.currentLaneType = null; player.userData.currentLaneZ = 0;
             scene.add(player);
 
-            // Bounding Box setup (Unchanged)
-            if (player.geometry.type === 'PlaneGeometry') { playerBoundingBox = new THREE.Box3().setFromCenterAndSize( player.position, new THREE.Vector3(playerW, playerH, 0.5) ); } else { playerBoundingBox = new THREE.Box3().setFromObject(player); }
+            // Bounding Box setup
+            if (player.geometry.type === 'PlaneGeometry') { playerBoundingBox = new THREE.Box3().setFromCenterAndSize( player.position, new THREE.Vector3(playerW, playerH, 0.5) ); }
+            else { playerBoundingBox = new THREE.Box3().setFromObject(player); }
          }
 
-        // --- Lane Generation Functions ---
-        // createLane handles new types
+        // --- Lane Generation Functions (Unchanged) ---
         function createLane(type, zPos) {
             const laneGeometry = new THREE.PlaneGeometry(laneLength, laneWidth);
             const laneMaterial = laneMaterials[type] || new THREE.MeshStandardMaterial({color: 0xff00ff});
             let laneData = { mesh: null, type: type, z: zPos, obstacles: [] };
             const laneMesh = new THREE.Mesh(laneGeometry, laneMaterial);
-            laneMesh.rotation.x = -Math.PI / 2;
-            laneMesh.position.set(0, 0, zPos);
-            laneMesh.receiveShadow = true;
-            scene.add(laneMesh);
-            laneData.mesh = laneMesh;
-            lanes.push(laneData);
-
-            // Only add obstacles/scenery to specific types
-            if (type === LANE_TYPES.WALKWAY && zPos < -laneWidth * 2) {
-                 addObstaclesToLane(laneData);
-            } else if (type === LANE_TYPES.CARPET) {
-                const sceneryChance = 0.20;
-                if (Math.random() < sceneryChance) addSceneryToLane(laneData);
-            }
-            // No obstacles/scenery on CONVEYOR, WET_FLOOR, or SAFE_ZONE
-
-            lastLaneZ = zPos;
-            return laneData;
+            laneMesh.rotation.x = -Math.PI / 2; laneMesh.position.set(0, 0, zPos); laneMesh.receiveShadow = true;
+            scene.add(laneMesh); laneData.mesh = laneMesh; lanes.push(laneData);
+            if (type === LANE_TYPES.WALKWAY && zPos < -laneWidth * 2) { addObstaclesToLane(laneData); }
+            else if (type === LANE_TYPES.CARPET) { const sceneryChance = 0.20; if (Math.random() < sceneryChance) addSceneryToLane(laneData); }
+            lastLaneZ = zPos; return laneData;
         }
-        // generateLane includes new probabilities
         function generateLane() {
-            const nextZ = lastLaneZ - laneWidth;
-            let laneType;
-            const randomValue = Math.random();
-
-            // Define probabilities
+            const nextZ = lastLaneZ - laneWidth; let laneType; const randomValue = Math.random();
             const probWalkway = 0.35; const probCarpet = 0.25; const probConveyor = 0.15;
-            const probWetFloor = 0.10; const probSafeZone = 0.15;
-            let cumulativeProb = 0;
-
-            cumulativeProb += probWalkway;
-            if (randomValue < cumulativeProb) { laneType = LANE_TYPES.WALKWAY; }
-            else { cumulativeProb += probCarpet; if (randomValue < cumulativeProb) { laneType = LANE_TYPES.CARPET; }
-            else { cumulativeProb += probConveyor / 2; if (randomValue < cumulativeProb) { laneType = LANE_TYPES.CONVEYOR_LEFT; }
-            else { cumulativeProb += probConveyor / 2; if (randomValue < cumulativeProb) { laneType = LANE_TYPES.CONVEYOR_RIGHT; }
-            else { cumulativeProb += probWetFloor; if (randomValue < cumulativeProb) { laneType = LANE_TYPES.WET_FLOOR; }
-            else { laneType = LANE_TYPES.SAFE_ZONE; }}}}} // Default to SAFE_ZONE
-
-             // Avoid two special lanes in a row
-            const lastLane = lanes[lanes.length - 1];
-            const lastLaneIsSpecial = lastLane && (lastLane.type === LANE_TYPES.CONVEYOR_LEFT || lastLane.type === LANE_TYPES.CONVEYOR_RIGHT || lastLane.type === LANE_TYPES.WET_FLOOR);
-            const currentLaneIsSpecial = (laneType === LANE_TYPES.CONVEYOR_LEFT || laneType === LANE_TYPES.CONVEYOR_RIGHT || laneType === LANE_TYPES.WET_FLOOR);
-            if (lastLaneIsSpecial && currentLaneIsSpecial) { laneType = Math.random() < 0.5 ? LANE_TYPES.CARPET : LANE_TYPES.SAFE_ZONE; }
-
+            const probWetFloor = 0.10; const probSafeZone = 0.15; let cumulativeProb = 0;
+            cumulativeProb += probWalkway; if (randomValue < cumulativeProb) { laneType = LANE_TYPES.WALKWAY; } else { cumulativeProb += probCarpet; if (randomValue < cumulativeProb) { laneType = LANE_TYPES.CARPET; } else { cumulativeProb += probConveyor / 2; if (randomValue < cumulativeProb) { laneType = LANE_TYPES.CONVEYOR_LEFT; } else { cumulativeProb += probConveyor / 2; if (randomValue < cumulativeProb) { laneType = LANE_TYPES.CONVEYOR_RIGHT; } else { cumulativeProb += probWetFloor; if (randomValue < cumulativeProb) { laneType = LANE_TYPES.WET_FLOOR; } else { laneType = LANE_TYPES.SAFE_ZONE; }}}}}
+            const lastLane = lanes[lanes.length - 1]; const lastLaneIsSpecial = lastLane && (lastLane.type === LANE_TYPES.CONVEYOR_LEFT || lastLane.type === LANE_TYPES.CONVEYOR_RIGHT || lastLane.type === LANE_TYPES.WET_FLOOR); const currentLaneIsSpecial = (laneType === LANE_TYPES.CONVEYOR_LEFT || laneType === LANE_TYPES.CONVEYOR_RIGHT || laneType === LANE_TYPES.WET_FLOOR); if (lastLaneIsSpecial && currentLaneIsSpecial) { laneType = Math.random() < 0.5 ? LANE_TYPES.CARPET : LANE_TYPES.SAFE_ZONE; }
             createLane(laneType, nextZ);
         }
-        // Scenery Generation (Keep scaled up sizes)
         function addSceneryToLane(laneData) { /* ... */ const sceneryType = Math.random() < 0.6 ? 'desk' : 'plant'; let sceneryMesh; const side = Math.random() < 0.5 ? -1 : 1; const xOffset = (laneLength / 3) + (Math.random() * laneLength / 4); const sceneryX = xOffset * side; const sceneryZ = laneData.z + (Math.random() - 0.5) * laneWidth * 0.8; if (sceneryType === 'desk') { const deskHeight = 1.2; const deskGeo = new THREE.BoxGeometry(2.5, deskHeight, 1.2); sceneryMesh = new THREE.Mesh(deskGeo, sceneryMaterials.desk); sceneryMesh.position.set(sceneryX, deskHeight / 2, sceneryZ); } else { const potHeight = 0.8; const potRadius = 0.5; const potGeo = new THREE.CylinderGeometry(potRadius * 0.8, potRadius, potHeight, 12); const potMesh = new THREE.Mesh(potGeo, sceneryMaterials.plantPot); potMesh.position.set(sceneryX, potHeight / 2, sceneryZ); const leafHeight = 1.0; const leafGeo = new THREE.ConeGeometry(potRadius * 1.2, leafHeight, 8); const leafMesh = new THREE.Mesh(leafGeo, sceneryMaterials.plantLeaf); leafMesh.position.set(sceneryX, potHeight + leafHeight / 2, sceneryZ); sceneryMesh = new THREE.Group(); sceneryMesh.add(potMesh); sceneryMesh.add(leafMesh); } sceneryMesh.castShadow = true; sceneryMesh.receiveShadow = true; scene.add(sceneryMesh); scenery.push(sceneryMesh); }
-        // Obstacle Generation (Keep adjusted spacing/density)
-        function addObstaclesToLane(laneData) { /* ... */ const maxObstacles = Math.min(3, 1 + Math.floor(score / 15)); const numObstacles = Math.floor(Math.random() * maxObstacles) + 1; const speedMultiplier = 1 + Math.min(1.5, score / 80); const baseSpeed = (0.08 + Math.random() * 0.10) * speedMultiplier; const speed = baseSpeed * (Math.random() < 0.5 ? 1 : -1); const direction = Math.sign(speed); const startEdge = (laneLength / 2 + 5) * direction * -1; const minSpacing = OBSTACLE_PLANE_WIDTH + 2.0; const totalSpacingNeeded = (numObstacles -1) * minSpacing; const randomSpacingPool = Math.max(0, laneLength - totalSpacingNeeded - OBSTACLE_PLANE_WIDTH * numObstacles); let currentX = startEdge; const availableObstacleTypes = Object.keys(OBSTACLE_TYPES); for (let i = 0; i < numObstacles; i++) { const randomTypeKey = availableObstacleTypes[Math.floor(Math.random() * availableObstacleTypes.length)]; const obstacleType = OBSTACLE_TYPES[randomTypeKey]; const obstacleTexture = obstacleTextures[obstacleType]; const obstacleW = OBSTACLE_PLANE_WIDTH; const obstacleH = OBSTACLE_PLANE_HEIGHT; const obstacleYPosition = obstacleH / 2; const obstacleGeometry = new THREE.PlaneGeometry(obstacleW, obstacleH); const obstacleMaterial = new THREE.MeshBasicMaterial({ map: obstacleTexture || null, color: obstacleTexture ? 0xffffff : DEFAULT_OBSTACLE_COLOR, transparent: true, side: THREE.DoubleSide }); const obstacleMesh = new THREE.Mesh(obstacleGeometry, obstacleMaterial); if (i > 0) { const spacingToAdd = minSpacing + (numObstacles > 1 ? Math.random() * (randomSpacingPool / (numObstacles - 1)) : 0); currentX -= spacingToAdd * direction; } else { currentX -= (Math.random() * (randomSpacingPool / numObstacles)) * direction; } obstacleMesh.position.set(currentX, obstacleYPosition, laneData.z); obstacleMesh.castShadow = true; obstacleMesh.receiveShadow = false; scene.add(obstacleMesh); const obstacleBoundingBox = new THREE.Box3().setFromCenterAndSize( obstacleMesh.position, new THREE.Vector3(obstacleW, obstacleH, 0.5) ); const obstacleData = { mesh: obstacleMesh, boundingBox: obstacleBoundingBox, speed: speed, direction: direction, laneZ: laneData.z, type: obstacleType }; obstacles.push(obstacleData); laneData.obstacles.push(obstacleData); } }
 
-        // --- Game Loop ---
-        function animate() {
-            animationFrameId = requestAnimationFrame(animate);
-            const deltaTime = clock.getDelta();
+        // --- Obstacle Generation ---
+        // --- *** FIXED *** Added fallback for unloaded textures ---
+        function addObstaclesToLane(laneData) {
+             const maxObstacles = Math.min(3, 1 + Math.floor(score / 15)); const numObstacles = Math.floor(Math.random() * maxObstacles) + 1;
+             const speedMultiplier = 1 + Math.min(1.5, score / 80); const baseSpeed = (0.08 + Math.random() * 0.10) * speedMultiplier;
+             const speed = baseSpeed * (Math.random() < 0.5 ? 1 : -1); const direction = Math.sign(speed);
+             const startEdge = (laneLength / 2 + 5) * direction * -1; const minSpacing = OBSTACLE_PLANE_WIDTH + 2.0;
+             const totalSpacingNeeded = (numObstacles -1) * minSpacing; const randomSpacingPool = Math.max(0, laneLength - totalSpacingNeeded - OBSTACLE_PLANE_WIDTH * numObstacles);
+             let currentX = startEdge; const availableObstacleTypes = Object.keys(OBSTACLE_TYPES);
 
-            // Idle Timer (Unchanged)
-            if (currentGameState === GAME_STATE.PLAYING && !isMoving) { const idleTime = clock.elapsedTime - lastMoveTime; if (idleTime > MAX_IDLE_TIME) { console.log("Idle time exceeded!"); triggerGameOver("idle"); } }
+             for (let i = 0; i < numObstacles; i++) {
+                 const randomTypeKey = availableObstacleTypes[Math.floor(Math.random() * availableObstacleTypes.length)];
+                 const obstacleType = OBSTACLE_TYPES[randomTypeKey];
+                 const obstacleTexture = obstacleTextures[obstacleType]; // Get potentially loaded texture
 
-            if (currentGameState === GAME_STATE.PLAYING) {
-                movePlayerVisually(deltaTime); // Handles player hop animation & position updates
-                moveObstacles(); // Moves existing obstacles
-                applyLaneEffects(deltaTime); // Apply Lane Effects
-                checkCollisions(); // Check for collisions after movement and effects
-                updateCamera(); // Update camera position smoothly
-                // Generate new lanes if needed
-                if (player && player.position.z < lastLaneZ + (generationDistance * laneWidth)) { generateLane(); }
-                cleanupEnvironment(); // Remove far-away objects
-            } else if (currentGameState === GAME_STATE.GAME_OVER) {
-                // Game Over animation (shrink player)
-                if (player && player.scale.x > 0.01) player.scale.multiplyScalar(0.9); else if (player) player.scale.set(0,0,0);
-            }
-
-            renderer.render(scene, camera);
-        }
-
-        // --- Player Movement ---
-        function movePlayerVisually(deltaTime) {
-             if (!player || !isMoving) return;
-             const character = CHARACTERS[selectedCharacterIndex];
-             const playerBaseY = character.height / 2;
-             const elapsedTime = clock.elapsedTime * 1000 - moveStartTime;
-             let progress = Math.min(1.0, elapsedTime / moveDuration);
-             const easedProgress = progress * (2 - progress); // Ease out quad
-
-             const startVec = new THREE.Vector3(playerPosition.x, playerBaseY, playerPosition.z);
-             const endVec = new THREE.Vector3(targetPlayerPosition.x, playerBaseY, targetPlayerPosition.z);
-
-             player.position.lerpVectors(startVec, endVec, easedProgress);
-
-             const hopHeight = 1.0;
-             player.position.y = playerBaseY + Math.sin(progress * Math.PI) * hopHeight;
-
-             if (progress >= 1.0) {
-                 player.position.copy(endVec);
-                 player.position.y = playerBaseY;
-                 isMoving = false;
-                 playerPosition.x = targetPlayerPosition.x;
-                 playerPosition.z = targetPlayerPosition.z;
-
-                 // Update current lane type after move completes
-                 updatePlayerCurrentLane();
-
-                 // Update bounding box after move
-                 if (player) {
-                     if (player.geometry.type === 'PlaneGeometry') { playerBoundingBox.setFromCenterAndSize(player.position, new THREE.Vector3(character.width, character.height, 0.5)); }
-                     else { playerBoundingBox.setFromObject(player); }
+                 // --- Check if texture is ready ---
+                 const useDefaultObstacleColor = !obstacleTexture || !obstacleTexture.image;
+                 if (useDefaultObstacleColor) {
+                     console.warn(`Texture for obstacle ${obstacleType} not ready, using default color.`);
                  }
+
+                 const obstacleW = OBSTACLE_PLANE_WIDTH; const obstacleH = OBSTACLE_PLANE_HEIGHT; const obstacleYPosition = obstacleH / 2;
+                 const obstacleGeometry = new THREE.PlaneGeometry(obstacleW, obstacleH);
+                 // --- Use fallback color if texture not ready ---
+                 const obstacleMaterial = new THREE.MeshBasicMaterial({
+                     map: useDefaultObstacleColor ? null : obstacleTexture,
+                     color: useDefaultObstacleColor ? DEFAULT_OBSTACLE_COLOR : 0xffffff,
+                     transparent: true, side: THREE.DoubleSide
+                 });
+                 const obstacleMesh = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
+
+                 if (i > 0) { const spacingToAdd = minSpacing + (numObstacles > 1 ? Math.random() * (randomSpacingPool / (numObstacles - 1)) : 0); currentX -= spacingToAdd * direction; }
+                 else { currentX -= (Math.random() * (randomSpacingPool / numObstacles)) * direction; }
+                 obstacleMesh.position.set(currentX, obstacleYPosition, laneData.z);
+                 obstacleMesh.castShadow = true; obstacleMesh.receiveShadow = false; scene.add(obstacleMesh);
+                 const obstacleBoundingBox = new THREE.Box3().setFromCenterAndSize( obstacleMesh.position, new THREE.Vector3(obstacleW, obstacleH, 0.5) );
+                 const obstacleData = { mesh: obstacleMesh, boundingBox: obstacleBoundingBox, speed: speed, direction: direction, laneZ: laneData.z, type: obstacleType };
+                 obstacles.push(obstacleData); laneData.obstacles.push(obstacleData);
              }
          }
-         // Function to find and store the player's current lane type
-         function updatePlayerCurrentLane() {
-            if (!player) return;
-            let foundLane = false;
-            for (let i = 0; i < lanes.length; i++) {
-                if (Math.abs(player.position.z - lanes[i].z) < laneWidth / 2) {
-                    player.userData.currentLaneType = lanes[i].type;
-                    player.userData.currentLaneZ = lanes[i].z;
-                    foundLane = true;
-                    break;
-                }
-            }
-            if (!foundLane) {
-                 player.userData.currentLaneType = null;
-                 player.userData.currentLaneZ = player.position.z;
-            }
-         }
 
-        // Function to apply effects based on current lane
-        function applyLaneEffects(deltaTime) {
-            if (!player || isMoving || currentGameState !== GAME_STATE.PLAYING) return; // Don't apply drift while hopping
+        // --- Game Loop (Unchanged) ---
+        function animate() { animationFrameId = requestAnimationFrame(animate); const deltaTime = clock.getDelta(); if (currentGameState === GAME_STATE.PLAYING && !isMoving) { const idleTime = clock.elapsedTime - lastMoveTime; if (idleTime > MAX_IDLE_TIME) { console.log("Idle time exceeded!"); triggerGameOver("idle"); } } if (currentGameState === GAME_STATE.PLAYING) { movePlayerVisually(deltaTime); moveObstacles(); applyLaneEffects(deltaTime); checkCollisions(); updateCamera(); if (player && player.position.z < lastLaneZ + (generationDistance * laneWidth)) { generateLane(); } cleanupEnvironment(); } else if (currentGameState === GAME_STATE.GAME_OVER) { if (player && player.scale.x > 0.01) player.scale.multiplyScalar(0.9); else if (player) player.scale.set(0,0,0); } renderer.render(scene, camera); }
 
-            const laneType = player.userData.currentLaneType;
-            let driftX = 0;
+        // --- Player Movement (Unchanged) ---
+        function movePlayerVisually(deltaTime) { if (!player || !isMoving) return; const character = CHARACTERS[selectedCharacterIndex]; const playerBaseY = character.height / 2; const elapsedTime = clock.elapsedTime * 1000 - moveStartTime; let progress = Math.min(1.0, elapsedTime / moveDuration); const easedProgress = progress * (2 - progress); const startVec = new THREE.Vector3(playerPosition.x, playerBaseY, playerPosition.z); const endVec = new THREE.Vector3(targetPlayerPosition.x, playerBaseY, targetPlayerPosition.z); player.position.lerpVectors(startVec, endVec, easedProgress); const hopHeight = 1.0; player.position.y = playerBaseY + Math.sin(progress * Math.PI) * hopHeight; if (progress >= 1.0) { player.position.copy(endVec); player.position.y = playerBaseY; isMoving = false; playerPosition.x = targetPlayerPosition.x; playerPosition.z = targetPlayerPosition.z; updatePlayerCurrentLane(); if (player) { if (player.geometry.type === 'PlaneGeometry') { playerBoundingBox.setFromCenterAndSize(player.position, new THREE.Vector3(character.width, character.height, 0.5)); } else { playerBoundingBox.setFromObject(player); } } } }
+        function updatePlayerCurrentLane() { if (!player) return; let foundLane = false; for (let i = 0; i < lanes.length; i++) { if (Math.abs(player.position.z - lanes[i].z) < laneWidth / 2) { player.userData.currentLaneType = lanes[i].type; player.userData.currentLaneZ = lanes[i].z; foundLane = true; break; } } if (!foundLane) { player.userData.currentLaneType = null; player.userData.currentLaneZ = player.position.z; } }
 
-            if (laneType === LANE_TYPES.CONVEYOR_LEFT) { driftX = -CONVEYOR_SPEED * deltaTime; }
-            else if (laneType === LANE_TYPES.CONVEYOR_RIGHT) { driftX = CONVEYOR_SPEED * deltaTime; }
+        // --- Lane Effects (Unchanged) ---
+        function applyLaneEffects(deltaTime) { if (!player || isMoving || currentGameState !== GAME_STATE.PLAYING) return; const laneType = player.userData.currentLaneType; let driftX = 0; if (laneType === LANE_TYPES.CONVEYOR_LEFT) { driftX = -CONVEYOR_SPEED * deltaTime; } else if (laneType === LANE_TYPES.CONVEYOR_RIGHT) { driftX = CONVEYOR_SPEED * deltaTime; } if (driftX !== 0) { player.position.x += driftX; playerPosition.x += driftX; targetPlayerPosition.x += driftX; const wallBoundary = laneLength / 2 - player.geometry.parameters.width / 2; player.position.x = THREE.MathUtils.clamp(player.position.x, -wallBoundary, wallBoundary); playerPosition.x = player.position.x; targetPlayerPosition.x = player.position.x; if (player) { if (player.geometry.type === 'PlaneGeometry') { playerBoundingBox.setFromCenterAndSize(player.position, new THREE.Vector3(CHARACTERS[selectedCharacterIndex].width, CHARACTERS[selectedCharacterIndex].height, 0.5)); } else { playerBoundingBox.setFromObject(player); } } } }
 
-            if (driftX !== 0) {
-                // Apply drift directly to player position
-                player.position.x += driftX;
-
-                // Update logical and target positions
-                playerPosition.x += driftX;
-                targetPlayerPosition.x += driftX;
-
-                // Clamp position
-                const wallBoundary = laneLength / 2 - player.geometry.parameters.width / 2;
-                player.position.x = THREE.MathUtils.clamp(player.position.x, -wallBoundary, wallBoundary);
-                playerPosition.x = player.position.x;
-                targetPlayerPosition.x = player.position.x;
-
-                // Update bounding box after drift
-                 if (player) {
-                     if (player.geometry.type === 'PlaneGeometry') { playerBoundingBox.setFromCenterAndSize(player.position, new THREE.Vector3(CHARACTERS[selectedCharacterIndex].width, CHARACTERS[selectedCharacterIndex].height, 0.5)); }
-                     else { playerBoundingBox.setFromObject(player); }
-                 }
-            }
-        }
-
-
-        // --- Other Functions (Obstacle Move, Camera, Collision, Cleanup, Controls, State, Util) ---
-        // Obstacle Move (Keep adjusted logic)
+        // --- Other Functions (Obstacle Move, Camera, Collision, Cleanup, Controls, State, Util) (Unchanged) ---
         function moveObstacles() { /* ... */ const wrapEdge = laneLength / 2 + 5; obstacles.forEach(obstacle => { let currentSpeed = obstacle.speed; obstacle.mesh.position.x += currentSpeed; if (obstacle.direction > 0 && obstacle.mesh.position.x > wrapEdge) { obstacle.mesh.position.x = -wrapEdge; } else if (obstacle.direction < 0 && obstacle.mesh.position.x < -wrapEdge) { obstacle.mesh.position.x = wrapEdge; } obstacle.boundingBox.setFromCenterAndSize( obstacle.mesh.position, new THREE.Vector3(OBSTACLE_PLANE_WIDTH, OBSTACLE_PLANE_HEIGHT, 0.5) ); }); }
-        // Camera Update (Keep adjusted logic)
         function updateCamera() { /* ... */ if (!player) return; const targetCameraPosition = new THREE.Vector3( player.position.x, camera.position.y, player.position.z + 10 ); camera.position.lerp(targetCameraPosition, 0.04); const targetLookAt = new THREE.Vector3( player.position.x, player.position.y * 0.5, player.position.z - 8 ); const currentLookAt = new THREE.Vector3(); camera.getWorldDirection(currentLookAt).multiplyScalar(15).add(camera.position); currentLookAt.lerp(targetLookAt, 0.05); camera.lookAt(currentLookAt); }
-        // Collision Check (Keep adjusted logic)
         function checkCollisions() { /* ... */ if (!player || isMoving || currentGameState !== GAME_STATE.PLAYING) { return; } if (player.geometry.type === 'PlaneGeometry') { const character = CHARACTERS[selectedCharacterIndex]; playerBoundingBox.setFromCenterAndSize(player.position, new THREE.Vector3(character.width, character.height, 0.5)); } else { playerBoundingBox.setFromObject(player); } obstacles.forEach(obstacle => { if (Math.abs(player.position.z - obstacle.laneZ) < laneWidth / 2) { if (playerBoundingBox.intersectsBox(obstacle.boundingBox)) { console.log("Collision Detected!"); triggerGameOver("collision"); } } }); }
-        // Cleanup (Keep adjusted logic)
         function cleanupEnvironment() { /* ... */ const cleanupThresholdZ = (player ? player.position.z : 0) + (cleanupBuffer * laneWidth); lanes = lanes.filter(lane => { if (lane.z < cleanupThresholdZ) return true; else { lane.obstacles.forEach(obstacle => { const index = obstacles.indexOf(obstacle); if (index > -1) obstacles.splice(index, 1); if (obstacle.mesh.parent) scene.remove(obstacle.mesh); }); if (lane.mesh.parent) scene.remove(lane.mesh); return false; } }); obstacles = obstacles.filter(obstacle => { if (obstacle.laneZ < cleanupThresholdZ) return true; else { if (obstacle.mesh.parent) scene.remove(obstacle.mesh); return false; } }); scenery = scenery.filter(item => { if (item.position.z < cleanupThresholdZ) return true; else { if (item.parent) scene.remove(item); return false; } }); }
-        // Controls (Keep adjusted logic)
         function onKeyDown(event) { /* ... */ if (currentGameState !== GAME_STATE.PLAYING || isMoving) return; let moved = false; const currentX = playerPosition.x; const currentZ = playerPosition.z; const moveAmount = laneWidth; switch (event.key) { case 'ArrowUp': case 'w': targetPlayerPosition.z = currentZ - moveAmount; targetPlayerPosition.x = currentX; score++; infoElement.innerText = `Score: ${score}`; moved = true; break; case 'ArrowLeft': case 'a': targetPlayerPosition.x = currentX - moveAmount; targetPlayerPosition.z = currentZ; moved = true; break; case 'ArrowRight': case 'd': targetPlayerPosition.x = currentX + moveAmount; targetPlayerPosition.z = currentZ; moved = true; break; case 'ArrowDown': case 's': targetPlayerPosition.z = currentZ + moveAmount; targetPlayerPosition.x = currentX; moved = true; break; } const nextX = targetPlayerPosition.x; const wallBoundary = laneLength / 2 - player.geometry.parameters.width / 2; if (moved && (nextX > wallBoundary || nextX < -wallBoundary)) { moved = false; targetPlayerPosition.x = currentX; targetPlayerPosition.z = currentZ; } if (moved) { isMoving = true; moveStartTime = clock.elapsedTime * 1000; lastMoveTime = clock.elapsedTime; } }
-        // Game Over, Menu, Resize (Unchanged logic)
         function triggerGameOver(reason = "collision") { /* ... */ if (currentGameState !== GAME_STATE.PLAYING) return; currentGameState = GAME_STATE.GAME_OVER; console.log(`Game Over! Score: ${score}, Reason: ${reason}`); finalScoreElement.innerText = score; if (reason === "idle") { gameOverReasonElement.innerText = "Took too long!"; } else { gameOverReasonElement.innerText = "Deadline Missed!"; } showOverlay(gameOverElement); const highScores = getHighScores(); const scoreNeeded = highScores.length < MAX_HIGH_SCORES ? 0 : highScores[MAX_HIGH_SCORES - 1].score; if (score > 0 && score >= scoreNeeded) { const characterName = CHARACTERS[selectedCharacterIndex].name; console.log(`New Top 3 Score with character: ${characterName}`); highScores.push({ name: characterName, score: score }); saveHighScores(highScores); console.log("New high score saved!"); } }
         function goToMenu() { /* ... */ currentGameState = GAME_STATE.MENU; showOverlay(mainMenuElement); }
         function onWindowResize() { /* ... */ camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
