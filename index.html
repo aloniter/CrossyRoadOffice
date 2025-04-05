@@ -81,8 +81,13 @@
 
         // --- Obstacle Definitions ---
         const OBSTACLE_TYPES = { CC: 'cc', LIVE_CHANGE: 'live_change', ON_CALL: 'on_call' };
-        const OBSTACLE_IMAGES = { [OBSTACLE_TYPES.CC]: 'CC.png', [OBSTACLE_TYPES.LIVE_CHANGE]: 'Live Change.png', [OBSTACLE_TYPES.ON_CALL]: 'On Call.png' };
-        let obstacleTextures = {};
+        // --- MODIFIED --- OBSTACLE_IMAGES now holds left/right variants
+        const OBSTACLE_IMAGES = {
+            [OBSTACLE_TYPES.CC]: { right: 'CC.png', left: 'CC R.png' }, // right = moving right (+ve speed), left = moving left (-ve speed)
+            [OBSTACLE_TYPES.LIVE_CHANGE]: { right: 'Live Change.png', left: 'Live Change R.png' },
+            [OBSTACLE_TYPES.ON_CALL]: { right: 'On Call.png', left: 'On Call R.png' }
+        };
+        let obstacleTextures = {}; // Will store { cc: { right: Texture, left: Texture }, ... }
         const OBSTACLE_PLANE_WIDTH = 5.0;
         const OBSTACLE_PLANE_HEIGHT = 5.0;
 
@@ -108,18 +113,53 @@
         function updateCharacterButtonSelection() { const buttons = characterButtonsElement.querySelectorAll('.char-button'); buttons.forEach((button, index) => { if (index === selectedCharacterIndex) button.classList.add('selected'); else button.classList.remove('selected'); }); }
         function populateCharacterButtons() { characterButtonsElement.innerHTML = ''; CHARACTERS.forEach((char, index) => { const button = document.createElement('button'); button.textContent = char.name; button.classList.add('char-button'); button.onclick = () => selectCharacter(index); characterButtonsElement.appendChild(button); }); updateCharacterButtonSelection(); }
 
-        // --- Preload Assets & Materials (Unchanged) ---
+        // --- Preload Assets & Materials ---
+        // --- MODIFIED --- Loads left/right obstacle textures
         function preloadAssets() {
             console.log("Preloading assets...");
             let maxAnisotropy = renderer ? renderer.capabilities.getMaxAnisotropy() : 1;
-            CHARACTERS.forEach((char, index) => { if (char.imageUrl) { characterTextures[index] = textureLoader.load(char.imageUrl, (texture) => { texture.magFilter = THREE.NearestFilter; texture.anisotropy = maxAnisotropy; texture.needsUpdate = true; /* console.log(`Texture loaded for ${char.name}`); */ }, undefined, (err) => console.error(`Failed texture: ${char.name}`, err) ); } });
-            for (const type in OBSTACLE_IMAGES) { const imageUrl = OBSTACLE_IMAGES[type]; obstacleTextures[type] = textureLoader.load(imageUrl, (texture) => { texture.magFilter = THREE.NearestFilter; texture.anisotropy = maxAnisotropy; texture.needsUpdate = true; /* console.log(`Texture loaded for ${type}`); */ }, undefined, (err) => console.error(`Failed texture: ${type}`, err) ); }
+
+            // Load Character Textures
+            CHARACTERS.forEach((char, index) => { if (char.imageUrl) { characterTextures[index] = textureLoader.load(char.imageUrl, (texture) => { texture.magFilter = THREE.NearestFilter; texture.anisotropy = maxAnisotropy; texture.needsUpdate = true; }, undefined, (err) => console.error(`Failed texture: ${char.name}`, err) ); } });
+
+            // --- MODIFIED --- Load Obstacle Textures (Both Directions) ---
+            obstacleTextures = {}; // Reset
+            for (const typeKey in OBSTACLE_IMAGES) { // Use OBSTACLE_TYPES keys (cc, live_change, on_call)
+                const images = OBSTACLE_IMAGES[typeKey];
+                obstacleTextures[typeKey] = {}; // Create sub-object { right: null, left: null }
+
+                const loadCallback = (texture) => {
+                    texture.magFilter = THREE.NearestFilter;
+                    texture.anisotropy = maxAnisotropy;
+                    texture.needsUpdate = true;
+                };
+
+                // Load Right-moving texture (e.g., CC.png)
+                if (images.right) {
+                    obstacleTextures[typeKey].right = textureLoader.load(images.right, loadCallback, undefined, (err) => console.error(`Failed texture: ${typeKey} Right (${images.right})`, err));
+                } else {
+                    console.warn(`Missing right image for obstacle type: ${typeKey}`);
+                }
+                // Load Left-moving texture (e.g., CC R.png)
+                if (images.left) {
+                    obstacleTextures[typeKey].left = textureLoader.load(images.left, loadCallback, undefined, (err) => console.error(`Failed texture: ${typeKey} Left (${images.left})`, err));
+                } else {
+                     console.warn(`Missing left image for obstacle type: ${typeKey}`);
+                     // Fallback: Use the right texture if left is missing
+                     obstacleTextures[typeKey].left = obstacleTextures[typeKey].right;
+                }
+            }
+            // --- End MODIFIED Obstacle Texture Loading ---
+
+            // Lane Materials
             const carpetTexture = createNoiseTexture(64, 64, '#90EE90', '#3CB371'); carpetTexture.repeat.set(8, 8);
             laneMaterials[LANE_TYPES.CARPET] = new THREE.MeshStandardMaterial({ map: carpetTexture, roughness: 0.9, metalness: 0.05 });
             const walkwayTexture = createTileTexture(64, 64, '#E07A5F', '#D45D3D', 24); walkwayTexture.repeat.set(8, 8);
             laneMaterials[LANE_TYPES.WALKWAY] = new THREE.MeshStandardMaterial({ map: walkwayTexture, roughness: 0.4, metalness: 0.1 });
             laneMaterials[LANE_TYPES.WATER] = new THREE.MeshStandardMaterial({ color: WATER_COLOR, roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.85 });
-            wallMaterial = new THREE.MeshStandardMaterial({ color: 0xFFEBCD, roughness: 0.9, metalness: 0.0 }); // BlanchedAlmond
+            // Wall Material
+            wallMaterial = new THREE.MeshStandardMaterial({ color: 0xFFEBCD, roughness: 0.9, metalness: 0.0 });
+            // Scenery Materials
             sceneryMaterials.desk = new THREE.MeshStandardMaterial({ color: SCENERY_COLORS.DESK, roughness: 0.8, metalness: 0.1 });
             sceneryMaterials.plantPot = new THREE.MeshStandardMaterial({ color: SCENERY_COLORS.PLANT_POT, roughness: 0.7, metalness: 0.1 });
             sceneryMaterials.plantLeaf = new THREE.MeshStandardMaterial({ color: SCENERY_COLORS.PLANT_LEAF, roughness: 0.8, metalness: 0.0 });
@@ -131,21 +171,17 @@
         function init() {
             // Get DOM Elements
             infoElement = document.getElementById('info'); mainMenuElement = document.getElementById('mainMenu'); scoreboardScreenElement = document.getElementById('scoreboardScreen'); gameOverElement = document.getElementById('gameOver'); characterButtonsElement = document.getElementById('characterButtons'); startGameButton = document.getElementById('startGameButton'); viewScoresButton = document.getElementById('viewScoresButton'); backToMenuButton = document.getElementById('backToMenuButton'); scoreListElement = document.getElementById('scoreList'); noScoresMessageElement = document.getElementById('noScoresMessage'); finalScoreElement = document.getElementById('finalScore'); gameOverReasonElement = document.getElementById('gameOverReason');
-
             // Scene Setup
             scene = new THREE.Scene();
-
             // Camera Setup
             camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.set(0, 15, 12); camera.lookAt(0, 0, 0);
-
             // Renderer Setup
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
             document.body.appendChild(renderer.domElement);
             renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
-
             // Lighting Setup
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); scene.add(ambientLight);
             const hemiLight = new THREE.HemisphereLight( 0xE8E8FF, 0xB0B0B0, 0.6 ); scene.add( hemiLight );
@@ -161,20 +197,16 @@
             directionalLight.shadow.camera.top = initialShadowSize;
             directionalLight.shadow.camera.bottom = -initialShadowSize;
             directionalLight.shadow.bias = -0.002; scene.add(directionalLight);
-
             // Preload Assets
             preloadAssets();
-
             // UI Setup
             if (characterButtonsElement) populateCharacterButtons(); else console.error("characterButtonsElement not found!");
             if (startGameButton) startGameButton.onclick = startGame; else console.error("startGameButton not found!");
             if (viewScoresButton) viewScoresButton.onclick = () => { displayHighScoresOnScreen(); currentGameState = GAME_STATE.SHOW_SCORES; showOverlay(scoreboardScreenElement); }; else console.error("viewScoresButton not found!");
             if (backToMenuButton) backToMenuButton.onclick = goToMenu; else console.error("backToMenuButton not found!");
-
             // Event Listeners
             window.addEventListener('resize', onWindowResize, false);
             document.addEventListener('keydown', onKeyDown, false);
-
             // Initial State
             goToMenu();
             animate();
@@ -236,7 +268,7 @@
         // addSceneryToLane (Unchanged)
         function addSceneryToLane(laneData) { const sceneryType = Math.random() < 0.6 ? 'desk' : 'plant'; let sceneryMesh; const side = Math.random() < 0.5 ? -1 : 1; const xOffset = (laneLength / 3) + (Math.random() * laneLength / 4); const sceneryX = xOffset * side; const sceneryZ = laneData.z + (Math.random() - 0.5) * laneWidth * 0.8; if (sceneryType === 'desk') { const deskHeight = 1.2; const deskGeo = new THREE.BoxGeometry(2.5, deskHeight, 1.2); sceneryMesh = new THREE.Mesh(deskGeo, sceneryMaterials.desk); sceneryMesh.position.set(sceneryX, deskHeight / 2, sceneryZ); } else { const potHeight = 0.8; const potRadius = 0.5; const potGeo = new THREE.CylinderGeometry(potRadius * 0.8, potRadius, potHeight, 12); const potMesh = new THREE.Mesh(potGeo, sceneryMaterials.plantPot); potMesh.position.set(sceneryX, potHeight / 2, sceneryZ); const leafHeight = 1.0; const leafGeo = new THREE.ConeGeometry(potRadius * 1.2, leafHeight, 8); const leafMesh = new THREE.Mesh(leafGeo, sceneryMaterials.plantLeaf); leafMesh.position.set(sceneryX, potHeight + leafHeight / 2, sceneryZ); sceneryMesh = new THREE.Group(); sceneryMesh.add(potMesh); sceneryMesh.add(leafMesh); } sceneryMesh.castShadow = true; sceneryMesh.receiveShadow = true; scene.add(sceneryMesh); scenery.push(sceneryMesh); }
 
-        // --- MODIFIED --- addObstaclesToLane uses MESH ROTATION now ---
+        // --- MODIFIED --- addObstaclesToLane uses correct texture based on direction ---
         function addObstaclesToLane(laneData) {
             const maxObstacles = Math.min(3, 1 + Math.floor(score / 15));
             const numObstacles = Math.floor(Math.random() * maxObstacles) + 1;
@@ -249,23 +281,31 @@
             const totalSpacingNeeded = (numObstacles -1) * minSpacing;
             const randomSpacingPool = Math.max(0, laneLength - totalSpacingNeeded - OBSTACLE_PLANE_WIDTH * numObstacles);
             let currentX = startEdge;
-            const availableObstacleTypes = Object.keys(OBSTACLE_TYPES);
+            const availableObstacleTypes = Object.keys(OBSTACLE_TYPES); // ["cc", "live_change", "on_call"]
 
             for (let i = 0; i < numObstacles; i++) {
                 const randomTypeKey = availableObstacleTypes[Math.floor(Math.random() * availableObstacleTypes.length)];
-                const obstacleType = OBSTACLE_TYPES[randomTypeKey];
-                const originalTexture = obstacleTextures[obstacleType]; // Get the original texture
+                const obstacleType = OBSTACLE_TYPES[randomTypeKey]; // e.g., "cc"
 
-                // --- REMOVED --- Texture flipping logic is removed ---
+                // --- MODIFIED --- Select texture based on direction ---
+                const textureSet = obstacleTextures[obstacleType]; // Get { left: Texture, right: Texture }
+                let textureToUse = null;
+                if (textureSet) {
+                    textureToUse = direction < 0 ? textureSet.left : textureSet.right;
+                    if (!textureToUse) { // Fallback if one direction is missing
+                        textureToUse = textureSet.right || textureSet.left;
+                    }
+                }
+                // --- End MODIFIED Texture Selection ---
 
                 const obstacleW = OBSTACLE_PLANE_WIDTH;
                 const obstacleH = OBSTACLE_PLANE_HEIGHT;
                 const obstacleYPosition = obstacleH / 2;
                 const obstacleGeometry = new THREE.PlaneGeometry(obstacleW, obstacleH);
-                // Use the original texture directly
+                // Use the selected texture
                 const obstacleMaterial = new THREE.MeshBasicMaterial({
-                    map: originalTexture || null, // Use original texture
-                    color: originalTexture ? 0xffffff : DEFAULT_OBSTACLE_COLOR,
+                    map: textureToUse || null, // Use textureToUse
+                    color: textureToUse ? 0xffffff : DEFAULT_OBSTACLE_COLOR, // Use fallback color if no texture
                     transparent: true,
                     side: THREE.DoubleSide
                 });
@@ -275,17 +315,17 @@
                 if (i > 0) { const spacingToAdd = minSpacing + (numObstacles > 1 ? Math.random() * (randomSpacingPool / (numObstacles - 1)) : 0); currentX -= spacingToAdd * direction; } else { currentX -= (Math.random() * (randomSpacingPool / numObstacles)) * direction; }
                 obstacleMesh.position.set(currentX, obstacleYPosition, laneData.z);
 
-                // --- NEW --- Rotate mesh if moving left ---
-                if (direction < 0) {
-                    obstacleMesh.rotation.y = Math.PI; // Rotate 180 degrees around Y axis
-                }
-                // --- End NEW Rotation ---
+                // --- REMOVED --- Mesh rotation is no longer needed ---
+                // if (direction < 0) {
+                //     obstacleMesh.rotation.y = Math.PI;
+                // }
+                // --- End REMOVED Rotation ---
 
                 obstacleMesh.castShadow = true;
                 obstacleMesh.receiveShadow = false;
                 scene.add(obstacleMesh);
 
-                // Bounding box calculation remains the same (based on unrotated geometry size and position)
+                // Bounding box calculation remains the same
                 const obstacleBoundingBox = new THREE.Box3().setFromCenterAndSize( obstacleMesh.position, new THREE.Vector3(obstacleW, obstacleH, 0.5) );
                 const obstacleData = { mesh: obstacleMesh, boundingBox: obstacleBoundingBox, speed: speed, direction: direction, laneZ: laneData.z, type: obstacleType };
                 obstacles.push(obstacleData);
