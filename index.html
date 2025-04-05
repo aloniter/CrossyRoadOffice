@@ -127,8 +127,7 @@
             console.log("Asset preloading & generation initiated.");
         }
 
-        // --- Initialization ---
-        // --- MODIFIED --- Adjusted shadow camera far plane
+        // --- Initialization (Unchanged from previous fix) ---
         function init() {
             // Get DOM Elements
             infoElement = document.getElementById('info'); mainMenuElement = document.getElementById('mainMenu'); scoreboardScreenElement = document.getElementById('scoreboardScreen'); gameOverElement = document.getElementById('gameOver'); characterButtonsElement = document.getElementById('characterButtons'); startGameButton = document.getElementById('startGameButton'); viewScoresButton = document.getElementById('viewScoresButton'); backToMenuButton = document.getElementById('backToMenuButton'); scoreListElement = document.getElementById('scoreList'); noScoresMessageElement = document.getElementById('noScoresMessage'); finalScoreElement = document.getElementById('finalScore'); gameOverReasonElement = document.getElementById('gameOverReason');
@@ -155,8 +154,7 @@
             directionalLight.castShadow = true;
             directionalLight.shadow.mapSize.width = 2048; directionalLight.shadow.mapSize.height = 2048;
             directionalLight.shadow.camera.near = 1;
-            // --- MODIFIED --- Increased shadow camera far plane
-            directionalLight.shadow.camera.far = 200; // Was 100
+            directionalLight.shadow.camera.far = 200; // Keep increased far plane
             const initialShadowSize = laneLength / 2 + 10;
             directionalLight.shadow.camera.left = -initialShadowSize;
             directionalLight.shadow.camera.right = initialShadowSize;
@@ -201,7 +199,7 @@
         // --- Create Player (Unchanged) ---
         function createPlayer() {
             const character = CHARACTERS[selectedCharacterIndex]; const playerW = character.width; const playerH = character.height; const playerBaseY = playerH / 2; let playerMaterial, playerGeometry;
-            if (character.imageUrl && characterTextures[selectedCharacterIndex]) { playerGeometry = new THREE.PlaneGeometry(playerW, playerH); playerMaterial = new THREE.MeshBasicMaterial({ map: characterTextures[selectedCharacterIndex], transparent: true, side: THREE.DoubleSide }); /* console.log(`Using texture for ${character.name}`); */ } else { playerGeometry = new THREE.BoxGeometry(playerW, playerH, playerW * 0.8); playerMaterial = new THREE.MeshStandardMaterial({ color: DEFAULT_PLAYER_COLOR, roughness: 0.6 }); /* console.log(`Using default cube for ${character.name}`); */ }
+            if (character.imageUrl && characterTextures[selectedCharacterIndex]) { playerGeometry = new THREE.PlaneGeometry(playerW, playerH); playerMaterial = new THREE.MeshBasicMaterial({ map: characterTextures[selectedCharacterIndex], transparent: true, side: THREE.DoubleSide }); } else { playerGeometry = new THREE.BoxGeometry(playerW, playerH, playerW * 0.8); playerMaterial = new THREE.MeshStandardMaterial({ color: DEFAULT_PLAYER_COLOR, roughness: 0.6 }); }
             player = new THREE.Mesh(playerGeometry, playerMaterial); player.position.set(playerPosition.x, playerBaseY, playerPosition.z); player.castShadow = true; player.receiveShadow = false; scene.add(player);
             if (player.geometry.type === 'PlaneGeometry') { playerBoundingBox = new THREE.Box3().setFromCenterAndSize( player.position, new THREE.Vector3(playerW, playerH, 0.5) ); } else { playerBoundingBox = new THREE.Box3().setFromObject(player); }
         }
@@ -268,22 +266,17 @@
         // --- Camera Update (Unchanged) ---
         function updateCamera() { if (!player) return; const targetCameraPosition = new THREE.Vector3( player.position.x, camera.position.y, player.position.z + 10 ); camera.position.lerp(targetCameraPosition, 0.04); const targetLookAt = new THREE.Vector3( player.position.x, player.position.y * 0.5, player.position.z - 8 ); const currentLookAt = new THREE.Vector3(); camera.getWorldDirection(currentLookAt).multiplyScalar(15).add(camera.position); currentLookAt.lerp(targetLookAt, 0.05); camera.lookAt(currentLookAt); }
 
-        // --- updateShadowCamera ---
-        // --- MODIFIED --- Increased shadowSizeV
+        // --- updateShadowCamera (Unchanged from previous fix) ---
         function updateShadowCamera() {
             if (!player || !directionalLight || !directionalLight.shadow) return;
-
             const shadowCam = directionalLight.shadow.camera;
-            const shadowSizeH = laneLength / 2 + 10; // Horizontal size
-            // --- MODIFIED --- Increased vertical shadow area
-            const shadowSizeV = 100; // Was 60
-
+            const shadowSizeH = laneLength / 2 + 10;
+            const shadowSizeV = 100; // Keep increased size
             shadowCam.left = player.position.x - shadowSizeH;
             shadowCam.right = player.position.x + shadowSizeH;
             shadowCam.top = player.position.z + shadowSizeV / 2;
             shadowCam.bottom = player.position.z - shadowSizeV / 2;
-
-            shadowCam.updateProjectionMatrix(); // IMPORTANT
+            shadowCam.updateProjectionMatrix();
         }
 
 
@@ -291,40 +284,44 @@
         function checkCollisions() { if (!player || isMoving || currentGameState !== GAME_STATE.PLAYING) { return; } if (player.geometry.type === 'PlaneGeometry') { const character = CHARACTERS[selectedCharacterIndex]; playerBoundingBox.setFromCenterAndSize(player.position, new THREE.Vector3(character.width, character.height, 0.5)); } else { playerBoundingBox.setFromObject(player); } obstacles.forEach(obstacle => { if (Math.abs(player.position.z - obstacle.laneZ) < laneWidth / 2) { if (playerBoundingBox.intersectsBox(obstacle.boundingBox)) { console.log("Collision Detected with obstacle!"); triggerGameOver("collision"); } } }); }
 
         // --- Cleanup Environment ---
-        // --- MODIFIED --- Corrected filter logic for ALL arrays
+        // --- MODIFIED --- Corrected filter logic for ALL arrays AGAIN ---
         function cleanupEnvironment() {
             // Calculate the Z position behind the player beyond which objects are removed
+            // Player Z is negative and decreasing. Threshold is player.z + positive_buffer.
+            // Threshold is closer to 0 than player.z.
+            // We want to REMOVE items with z > threshold (items behind the player relative to threshold)
+            // We want to KEEP items with z < threshold (items further away than threshold)
             const cleanupThresholdZ = (player ? player.position.z : 0) + (cleanupBuffer * laneWidth);
 
-            // Clean up lanes: Keep lanes that are IN FRONT of the threshold (>)
+            // Clean up lanes: Keep lanes where lane.z < threshold
             lanes = lanes.filter(lane => {
-                if (lane.z > cleanupThresholdZ) return true; // Keep lane
-                else { // Remove lane and its contents
+                if (lane.z < cleanupThresholdZ) return true; // Keep lane (further away)
+                else { // Remove lane (behind threshold)
                     lane.obstacles.forEach(obstacle => { const index = obstacles.indexOf(obstacle); if (index > -1) obstacles.splice(index, 1); if (obstacle.mesh.parent) scene.remove(obstacle.mesh); });
                     lane.safeSpots.forEach(spot => { const index = safeSpots.indexOf(spot); if (index > -1) safeSpots.splice(index, 1); if (spot.mesh.parent) scene.remove(spot.mesh); });
                     if (lane.mesh.parent) scene.remove(lane.mesh);
-                    return false; // Remove from lanes array
+                    return false;
                 }
             });
-            // Clean up obstacles (fallback): Keep obstacles IN FRONT of the threshold (>)
+            // Clean up obstacles (fallback): Keep obstacles where obstacle.laneZ < threshold
             obstacles = obstacles.filter(obstacle => {
-                if (obstacle.laneZ > cleanupThresholdZ) return true;
+                if (obstacle.laneZ < cleanupThresholdZ) return true;
                 else { if (obstacle.mesh.parent) scene.remove(obstacle.mesh); return false; }
             });
-            // Clean up safe spots (fallback): Keep spots IN FRONT of the threshold (>)
+            // Clean up safe spots (fallback): Keep spots where spot.z < threshold
             safeSpots = safeSpots.filter(spot => {
-                if (spot.z > cleanupThresholdZ) return true;
+                if (spot.z < cleanupThresholdZ) return true;
                 else { if (spot.mesh.parent) scene.remove(spot.mesh); return false; }
             });
-            // Clean up scenery: Keep scenery IN FRONT of the threshold (>)
+            // Clean up scenery: Keep scenery where itemZ < threshold
             scenery = scenery.filter(item => {
-                const itemZ = item.position ? item.position.z : (item.children.length > 0 ? item.children[0].position.z : cleanupThresholdZ + 1); // Get Z, default to keep if no position
-                if (itemZ > cleanupThresholdZ) return true;
+                const itemZ = item.position ? item.position.z : (item.children.length > 0 ? item.children[0].position.z : cleanupThresholdZ - 1); // Default Z to keep if no position
+                if (itemZ < cleanupThresholdZ) return true;
                 else { if (item.parent) scene.remove(item); return false; }
             });
-            // Clean up wall segments: Keep segments IN FRONT of the threshold (>)
+            // Clean up wall segments: Keep segments where segment.z < threshold
             wallSegments = wallSegments.filter(segment => {
-                if (segment.z > cleanupThresholdZ) return true; // Keep segment
+                if (segment.z < cleanupThresholdZ) return true; // Keep segment
                 else {
                     if (segment.mesh.parent) scene.remove(segment.mesh); // Remove mesh
                     return false; // Remove from array
