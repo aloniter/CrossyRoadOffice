@@ -15,7 +15,7 @@
         .overlay button { display: block; width: 80%; margin: 15px auto; padding: 12px 20px; font-size: 18px; cursor: pointer; border: none; border-radius: 8px; background-color: #4682B4; color: white; transition: background-color 0.3s, transform 0.1s; box-shadow: 0 4px 6px rgba(0,0,0,0.2); }
         .overlay button:hover { background-color: #5A9BD5; }
         .overlay button:active { transform: scale(0.95); background-color: #41729F; }
-        #mainMenu .character-selection { margin-bottom: 20px; padding: 10px; background-color: rgba(255,255,255,0.1); border-radius: 8px; }
+        #mainMenu .character-selection { margin-bottom: 20px; padding: 10px; background-color: rgba(255,255,255,0.1); border-radius: 8px; max-height: 250px; overflow-y: auto; /* Added scroll for many characters */ }
         #mainMenu .character-selection h3 { margin-top: 0; margin-bottom: 10px; font-size: 16px; }
         #mainMenu .char-button { display: inline-block; width: auto; padding: 8px 15px; margin: 5px; font-size: 14px; border: 2px solid transparent; background-color: #6c757d; }
         #mainMenu .char-button.selected { border-color: #FFD700; background-color: #4682B4; }
@@ -64,17 +64,26 @@
         const WALL_THICKNESS = 1.0;
 
         // --- Character Definition ---
-        // --- MODIFIED --- Added Lin, Asaf, Tal, Ron, Hadar
+        // --- MODIFIED --- Added more characters
         const CHARACTERS = [
              { name: 'Alon', imageUrl: 'Alon.png', width: 2.8, height: 3.36 },
              { name: 'Sahar', imageUrl: 'Sahar.png', width: 2.8, height: 3.36 },
              { name: 'Mor', imageUrl: 'Mor.png', width: 2.8, height: 3.36 },
-             { name: 'Lin', imageUrl: 'Lin.png', width: 2.8, height: 3.36 },   // Added Lin
-             { name: 'Asaf', imageUrl: 'Asaf.png', width: 2.8, height: 3.36 },  // Added Asaf
-             { name: 'Tal', imageUrl: 'Tal.png', width: 2.8, height: 3.36 },    // Added Tal
-             { name: 'Ron', imageUrl: 'Ron.png', width: 2.8, height: 3.36 },    // Added Ron
-             { name: 'Hadar', imageUrl: 'Hadar.png', width: 2.8, height: 3.36 }, // Added Hadar
-             { name: 'Default', imageUrl: null, width: 2.2, height: 2.2 }
+             { name: 'Lin', imageUrl: 'Lin.png', width: 2.8, height: 3.36 },
+             { name: 'Asaf', imageUrl: 'Asaf.png', width: 2.8, height: 3.36 },
+             { name: 'Tal', imageUrl: 'Tal.png', width: 2.8, height: 3.36 },
+             { name: 'Ron', imageUrl: 'Ron.png', width: 2.8, height: 3.36 },
+             { name: 'Hadar', imageUrl: 'Hadar.png', width: 2.8, height: 3.36 },
+             // --- NEW CHARACTERS ---
+             { name: 'Adi', imageUrl: 'Adi.png', width: 2.8, height: 3.36 },
+             { name: 'Alex', imageUrl: 'Alex.png', width: 2.8, height: 3.36 },
+             { name: 'Amit', imageUrl: 'Amit.png', width: 2.8, height: 3.36 },
+             { name: 'Anna', imageUrl: 'Anna.png', width: 2.8, height: 3.36 },
+             { name: 'May Boss', imageUrl: 'May Boss.png', width: 2.8, height: 3.36 },
+             { name: 'May QA', imageUrl: 'May QA.png', width: 2.8, height: 3.36 },
+             { name: 'Ofek', imageUrl: 'Ofek.png', width: 2.8, height: 3.36 },
+             // --- END NEW ---
+             { name: 'Default', imageUrl: null, width: 2.2, height: 2.2 } // Keep Default last
         ];
         let selectedCharacterIndex = 0; // Default to Alon
         let characterTextures = {};
@@ -143,7 +152,7 @@
                          texture.magFilter = THREE.NearestFilter;
                          texture.anisotropy = maxAnisotropy;
                          texture.needsUpdate = true;
-                    }, undefined, (err) => console.error(`Failed texture: ${char.name}`, err) );
+                    }, undefined, (err) => console.error(`Failed texture: ${char.name} (${char.imageUrl})`, err) ); // Added filename to error
                 }
              });
             // Load Obstacle Textures
@@ -197,7 +206,7 @@
             scene.add(directionalLight);
             scene.add(directionalLight.target);
             preloadAssets();
-            if (characterButtonsElement) populateCharacterButtons(); else console.error("characterButtonsElement not found!"); // This will now create the new character buttons
+            if (characterButtonsElement) populateCharacterButtons(); else console.error("characterButtonsElement not found!"); // This will now create all the character buttons
             if (startGameButton) startGameButton.onclick = startGame; else console.error("startGameButton not found!");
             if (viewScoresButton) viewScoresButton.onclick = () => { displayHighScoresOnScreen(); currentGameState = GAME_STATE.SHOW_SCORES; showOverlay(scoreboardScreenElement); }; else console.error("viewScoresButton not found!");
             if (backToMenuButton) backToMenuButton.onclick = goToMenu; else console.error("backToMenuButton not found!");
