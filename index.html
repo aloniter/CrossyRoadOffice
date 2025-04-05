@@ -140,7 +140,7 @@
         }
 
         // --- Initialization ---
-        // --- MODIFIED --- Added light target to scene
+        // --- MODIFIED --- Adjusted shadow camera far and bias
         function init() {
             // Get DOM Elements
             infoElement = document.getElementById('info'); mainMenuElement = document.getElementById('mainMenu'); scoreboardScreenElement = document.getElementById('scoreboardScreen'); gameOverElement = document.getElementById('gameOver'); characterButtonsElement = document.getElementById('characterButtons'); startGameButton = document.getElementById('startGameButton'); viewScoresButton = document.getElementById('viewScoresButton'); backToMenuButton = document.getElementById('backToMenuButton'); scoreListElement = document.getElementById('scoreList'); noScoresMessageElement = document.getElementById('noScoresMessage'); finalScoreElement = document.getElementById('finalScore'); gameOverReasonElement = document.getElementById('gameOverReason');
@@ -163,18 +163,18 @@
             directionalLight.castShadow = true;
             directionalLight.shadow.mapSize.width = 2048; directionalLight.shadow.mapSize.height = 2048;
             directionalLight.shadow.camera.near = 1;
-            directionalLight.shadow.camera.far = 200;
+            // --- MODIFIED --- Drastically increased shadow camera far plane
+            directionalLight.shadow.camera.far = 500; // Was 200
             const initialShadowSize = laneLength / 2 + 10;
             directionalLight.shadow.camera.left = -initialShadowSize;
             directionalLight.shadow.camera.right = initialShadowSize;
             directionalLight.shadow.camera.top = initialShadowSize;
             directionalLight.shadow.camera.bottom = -initialShadowSize;
-            directionalLight.shadow.bias = -0.002;
+            // --- MODIFIED --- Slightly increased negative bias
+            directionalLight.shadow.bias = -0.005; // Was -0.002
             scene.add(directionalLight);
-            // --- NEW --- Explicitly add the light's target to the scene
-            // The target's initial position is (0,0,0) by default
+            // Add the light's target to the scene
             scene.add(directionalLight.target);
-            // --- End NEW ---
 
             // Preload Assets
             preloadAssets();
@@ -318,14 +318,14 @@
         function updateCamera() { if (!player) return; const targetCameraPosition = new THREE.Vector3( player.position.x, camera.position.y, player.position.z + 10 ); camera.position.lerp(targetCameraPosition, 0.04); const targetLookAt = new THREE.Vector3( player.position.x, player.position.y * 0.5, player.position.z - 8 ); const currentLookAt = new THREE.Vector3(); camera.getWorldDirection(currentLookAt).multiplyScalar(15).add(camera.position); currentLookAt.lerp(targetLookAt, 0.05); camera.lookAt(currentLookAt); }
 
         // --- updateShadowCamera ---
-        // --- MODIFIED --- Updates light target position smoothly
+        // --- MODIFIED --- Increased vertical size, using direct target set
         function updateShadowCamera() {
             if (!player || !directionalLight || !directionalLight.shadow) return;
 
             const shadowCam = directionalLight.shadow.camera;
             const shadowSizeH = laneLength / 2 + 10;
-            // --- MODIFIED --- Increased vertical shadow area slightly more
-            const shadowSizeV = 120; // Was 100
+            // --- MODIFIED --- Drastically increased vertical shadow area
+            const shadowSizeV = 200; // Was 120
 
             // Update frustum bounds
             shadowCam.left = player.position.x - shadowSizeH;
@@ -334,16 +334,15 @@
             shadowCam.bottom = player.position.z - shadowSizeV / 2;
             shadowCam.updateProjectionMatrix(); // Update bounds
 
-            // --- NEW --- Update light target smoothly
+            // --- MODIFIED --- Update light target directly (removed lerp for testing)
             if (directionalLight.target) {
                 // Target a point slightly ahead of the player on the ground plane
-                const targetPos = new THREE.Vector3(player.position.x, 0, player.position.z - 15); // Target further ahead
-                // Smoothly move the light's target towards this point using lerp
-                directionalLight.target.position.lerp(targetPos, 0.05); // Adjust lerp factor for smoothness (smaller = smoother)
-                // Optional: If target matrix isn't automatically updated by renderer/light
-                // directionalLight.target.updateMatrixWorld();
+                const targetPosX = player.position.x;
+                const targetPosZ = player.position.z - 15; // Target further ahead
+                directionalLight.target.position.set(targetPosX, 0, targetPosZ);
+                // directionalLight.target.updateMatrixWorld(); // Usually not needed
             }
-            // --- End NEW ---
+            // --- End MODIFIED Target Update ---
         }
 
 
