@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Office Crossing Challenge - Online!</title> {/* Updated Title */}
+    <title>3D Office Crossing Challenge - Online!</title>
     <style>
         /* Styles remain the same */
         body { margin: 0; overflow: hidden; font-family: sans-serif; background: linear-gradient(to bottom, #87CEEB, #B0E0E6); color: #333; height: 100vh; }
@@ -38,26 +38,14 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
-    <script type="module">
-        // --- Firebase Initialization ---
-        // Import the functions you need from the SDKs you need
+    <script type="module" id="firebase-init-script">
+        // Import Firebase functions
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.7/firebase-app.js";
-        import {
-            getFirestore,
-            collection,
-            addDoc,
-            serverTimestamp,
-            query,
-            orderBy,
-            limit,
-            getDocs
-        } from "https://www.gstatic.com/firebasejs/9.6.7/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, serverTimestamp, query, orderBy, limit, getDocs } from "https://www.gstatic.com/firebasejs/9.6.7/firebase-firestore.js";
 
-        // Your web app's Firebase configuration (from user)
-        // WARNING: API keys for web apps are public, but secure your app
-        // using Firestore Security Rules and Firebase Hosting authorized domains.
+        // Your web app's Firebase configuration
         const firebaseConfig = {
-          apiKey: "AIzaSyCEVtcw6InjPAtT6qRDnMNNciNAVhMIBhM", // Replace with your actual key if different
+          apiKey: "AIzaSyCEVtcw6InjPAtT6qRDnMNNciNAVhMIBhM", // Replace with your actual key if needed
           authDomain: "office-crossing-game.firebaseapp.com",
           projectId: "office-crossing-game",
           storageBucket: "office-crossing-game.appspot.com",
@@ -65,31 +53,39 @@
           appId: "1:1060039127140:web:d7e01f6f64e97b4fcb6f71"
         };
 
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        // Get Firestore instance and make it globally accessible (or pass it around)
-        window.db = getFirestore(app);
-        window.fb = { // Make specific functions globally accessible for simplicity here
-            collection, addDoc, serverTimestamp, query, orderBy, limit, getDocs
-        };
-        console.log("Firebase Initialized with Firestore (modular SDK)");
+        try {
+            // Initialize Firebase
+            const app = initializeApp(firebaseConfig);
+            // Get Firestore instance
+            const db = getFirestore(app);
+            console.log("Firebase Initialized successfully.");
 
-        // --- Start the Game Logic ---
-        // Delay starting the game slightly to ensure Firebase init completes
-        // (Alternatively, use await or proper module loading if bundling)
-        setTimeout(initializeGame, 100);
+            // Make db and functions globally accessible for the main game script
+            window.db = db;
+            window.fb = { collection, addDoc, serverTimestamp, query, orderBy, limit, getDocs };
 
+            // --- Call the main game initialization function NOW that Firebase is ready ---
+            if (typeof initializeGame === 'function') {
+                initializeGame(); // Start the main game setup
+            } else {
+                console.error("initializeGame function not found! Check script order/definition.");
+                alert("Error starting the game. Please check the console.");
+            }
+
+        } catch (error) {
+            console.error("Firebase initialization failed:", error);
+            alert("Error initializing game services. Please try refreshing the page.");
+            // Display error to user on the page if desired
+            const menu = document.getElementById('mainMenu');
+            if(menu) menu.innerHTML = `<div class="overlay-content"><h2>Error</h2><p>Could not connect to game services. Please check console and refresh.</p></div>`;
+        }
     </script>
 
     <script>
-        // --- Game Logic (immediately invoked function expression to contain scope) ---
-        (function initializeGame() {
-            // Make sure Firebase is ready before starting
-            if (!window.db || !window.fb) {
-                 console.error("Firebase not ready, retrying...");
-                 setTimeout(initializeGame, 200); // Retry if Firebase wasn't ready
-                 return;
-            }
+        // --- Define initializeGame and the rest of the game logic ---
+        // NO IIFE wrapper needed here anymore
+        function initializeGame() {
+            // Firebase is already initialized and window.db/window.fb are set
             console.log("Starting Game Initialization...");
 
             // Access Firebase functions from window scope
@@ -112,7 +108,7 @@
             let isMoving = false; let moveDuration = 150; let moveStartTime = 0;
             let lastLaneZ = 0; let generationDistance = 20; let cleanupBuffer = 5;
             let clock = new THREE.Clock(); let textureLoader = new THREE.TextureLoader();
-            const MAX_HIGH_SCORES = 3; // This constant is now just for local display limit if needed, not storage limit
+            // MAX_HIGH_SCORES is no longer used for storage logic
             let animationFrameId = null;
             let laneMaterials = {}; let wallMaterial; let sceneryMaterials = {};
             let lastMoveTime = 0; const MAX_IDLE_TIME = 5.0;
@@ -122,7 +118,7 @@
             const WALL_HEIGHT = 8;
             const WALL_THICKNESS = 1.0;
 
-            // --- Character Definition (including all added characters) ---
+            // --- Character Definition ---
             const CHARACTERS = [
                  { name: 'Alon', imageUrl: 'Alon.png', width: 2.8, height: 3.36 },
                  { name: 'Sahar', imageUrl: 'Sahar.png', width: 2.8, height: 3.36 },
@@ -146,12 +142,11 @@
 
             // --- THEME Constants & Colors (Unchanged) ---
             const LANE_TYPES = { CARPET: 'carpet', WALKWAY: 'walkway', WATER: 'water' };
-            const DEFAULT_PLAYER_COLOR = 0xADD8E6; /* ... etc ... */
+            const DEFAULT_PLAYER_COLOR = 0xADD8E6;
             const DEFAULT_OBSTACLE_COLOR = 0xff00ff;
             const SCENERY_COLORS = { DESK: 0xAF8F6D, PLANT_POT: 0xCD853F, PLANT_LEAF: 0x2E8B57 };
             const SAFE_SPOT_COLOR = 0x90EE90;
             const WATER_COLOR = 0x1E90FF;
-
 
             // --- Obstacle Definitions (Unchanged) ---
             const OBSTACLE_TYPES = { CC: 'cc', LIVE_CHANGE: 'live_change', ON_CALL: 'on_call' };
@@ -174,8 +169,6 @@
             function createTileTexture(width, height, bgColor, lineColor, tileSize) { const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; const ctx = canvas.getContext('2d'); ctx.fillStyle = bgColor; ctx.fillRect(0, 0, width, height); ctx.strokeStyle = lineColor; ctx.lineWidth = Math.max(1, Math.floor(width / 100)); ctx.beginPath(); for (let x = 0; x <= width; x += tileSize) { ctx.moveTo(x, 0); ctx.lineTo(x, height); } for (let y = 0; y <= height; y += tileSize) { ctx.moveTo(0, y); ctx.lineTo(width, y); } ctx.stroke(); const texture = new THREE.CanvasTexture(canvas); texture.wrapS = texture.wrapT = THREE.RepeatWrapping; return texture; }
 
             // --- REMOVED --- localStorage Leaderboard Functions ---
-            // function getHighScores() { ... }
-            // function saveHighScores(scores) { ... }
 
             // --- UI State Management (Unchanged) ---
             function showOverlay(overlayElement) { mainMenuElement.classList.add('hidden'); scoreboardScreenElement.classList.add('hidden'); gameOverElement.classList.add('hidden'); infoElement.classList.add('hidden'); if (overlayElement) { overlayElement.classList.remove('hidden'); } }
@@ -221,9 +214,24 @@
                 console.log("Asset preloading & generation initiated.");
             }
 
-            // --- Initialization (Unchanged) ---
+            // --- Initialization ---
+            // Now called by initializeGame() after Firebase is ready
             function init() {
-                infoElement = document.getElementById('info'); mainMenuElement = document.getElementById('mainMenu'); scoreboardScreenElement = document.getElementById('scoreboardScreen'); gameOverElement = document.getElementById('gameOver'); characterButtonsElement = document.getElementById('characterButtons'); startGameButton = document.getElementById('startGameButton'); viewScoresButton = document.getElementById('viewScoresButton'); backToMenuButton = document.getElementById('backToMenuButton'); scoreListElement = document.getElementById('scoreList'); noScoresMessageElement = document.getElementById('noScoresMessage'); finalScoreElement = document.getElementById('finalScore'); gameOverReasonElement = document.getElementById('gameOverReason');
+                console.log("Running init()..."); // Add log
+                infoElement = document.getElementById('info');
+                mainMenuElement = document.getElementById('mainMenu');
+                // ... (get other DOM elements) ...
+                scoreboardScreenElement = document.getElementById('scoreboardScreen');
+                gameOverElement = document.getElementById('gameOver');
+                characterButtonsElement = document.getElementById('characterButtons');
+                startGameButton = document.getElementById('startGameButton');
+                viewScoresButton = document.getElementById('viewScoresButton');
+                backToMenuButton = document.getElementById('backToMenuButton');
+                scoreListElement = document.getElementById('scoreList');
+                noScoresMessageElement = document.getElementById('noScoresMessage');
+                finalScoreElement = document.getElementById('finalScore');
+                gameOverReasonElement = document.getElementById('gameOverReason');
+
                 scene = new THREE.Scene();
                 camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
                 camera.position.set(0, 15, 12); camera.lookAt(0, 0, 0);
@@ -249,19 +257,33 @@
                 scene.add(directionalLight);
                 scene.add(directionalLight.target);
                 preloadAssets();
+
+                // Attach listeners - this should now happen reliably
                 if (characterButtonsElement) populateCharacterButtons(); else console.error("characterButtonsElement not found!");
-                if (startGameButton) startGameButton.onclick = startGame; else console.error("startGameButton not found!");
-                // --- MODIFIED --- viewScoresButton now calls the async Firestore version
-                if (viewScoresButton) viewScoresButton.onclick = () => { displayHighScoresOnScreen(); currentGameState = GAME_STATE.SHOW_SCORES; showOverlay(scoreboardScreenElement); }; else console.error("viewScoresButton not found!");
+                if (startGameButton) {
+                     console.log("Attaching startGame listener to button:", startGameButton); // Add log
+                     startGameButton.onclick = startGame;
+                 } else {
+                     console.error("startGameButton not found!");
+                 }
+                if (viewScoresButton) {
+                    console.log("Attaching viewScores listener to button:", viewScoresButton); // Add log
+                    viewScoresButton.onclick = () => { displayHighScoresOnScreen(); currentGameState = GAME_STATE.SHOW_SCORES; showOverlay(scoreboardScreenElement); };
+                } else {
+                     console.error("viewScoresButton not found!");
+                }
                 if (backToMenuButton) backToMenuButton.onclick = goToMenu; else console.error("backToMenuButton not found!");
+
                 window.addEventListener('resize', onWindowResize, false);
                 document.addEventListener('keydown', onKeyDown, false);
-                goToMenu();
-                animate();
+                goToMenu(); // Show main menu initially
+                animate(); // Start animation loop
+                console.log("init() finished."); // Add log
             }
 
             // --- Game Start Logic (Unchanged) ---
             function startGame() {
+                console.log("Start Game button clicked!"); // Add log
                 console.log("Starting game..."); score = 0; playerPosition = { x: 0, z: 0 }; targetPlayerPosition = { x: 0, z: 0 }; lastLaneZ = 0; isMoving = false; infoElement.innerText = `Score: ${score}`; lastMoveTime = clock.elapsedTime; clearGameObjects(); createPlayer(); createLane(LANE_TYPES.CARPET, 0); for (let i = 1; i < generationDistance; i++) { generateLane(); } camera.position.set(0, 15, 12); camera.lookAt(0, 0, 0); currentGameState = GAME_STATE.PLAYING; showOverlay(null); infoElement.classList.remove('hidden'); if (!clock.running) clock.start(); if (!animationFrameId) animate();
             }
 
@@ -475,14 +497,13 @@
             function onWindowResize() { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
 
             // --- Start the application ---
-            // Wait for DOMContentLoaded before initializing game logic
-             document.addEventListener('DOMContentLoaded', (event) => {
-                 console.log("DOM fully loaded and parsed, starting Firebase/Game init check.");
-                 // The initializeGame() function is called via setTimeout from the module script
-                 // after Firebase is initialized.
-             });
+            // The init() call is now the last step inside initializeGame
+            // init(); // Call init here
 
-        })(); // End of the main game logic IIFE
+        } // --- End of initializeGame function ---
+
+        // --- REMOVED DOMContentLoaded listener ---
+        // The game now starts via the call from the firebase-init-script module
 
     </script>
 </body>
