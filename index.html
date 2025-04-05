@@ -81,11 +81,13 @@
 
         // --- Obstacle Definitions ---
         const OBSTACLE_TYPES = { CC: 'cc', LIVE_CHANGE: 'live_change', ON_CALL: 'on_call' };
-        // --- MODIFIED --- OBSTACLE_IMAGES now holds left/right variants
+        // --- *** MODIFIED *** --- Swapped left/right image assignments ---
         const OBSTACLE_IMAGES = {
-            [OBSTACLE_TYPES.CC]: { right: 'CC.png', left: 'CC R.png' }, // right = moving right (+ve speed), left = moving left (-ve speed)
-            [OBSTACLE_TYPES.LIVE_CHANGE]: { right: 'Live Change.png', left: 'Live Change R.png' },
-            [OBSTACLE_TYPES.ON_CALL]: { right: 'On Call.png', left: 'On Call R.png' }
+            // right: image for obstacles moving right-to-left (direction < 0)
+            // left: image for obstacles moving left-to-right (direction > 0)
+            [OBSTACLE_TYPES.CC]: { right: 'CC R.png', left: 'CC.png' },
+            [OBSTACLE_TYPES.LIVE_CHANGE]: { right: 'Live Change R.png', left: 'Live Change.png' },
+            [OBSTACLE_TYPES.ON_CALL]: { right: 'On Call R.png', left: 'On Call.png' }
         };
         let obstacleTextures = {}; // Will store { cc: { right: Texture, left: Texture }, ... }
         const OBSTACLE_PLANE_WIDTH = 5.0;
@@ -114,7 +116,7 @@
         function populateCharacterButtons() { characterButtonsElement.innerHTML = ''; CHARACTERS.forEach((char, index) => { const button = document.createElement('button'); button.textContent = char.name; button.classList.add('char-button'); button.onclick = () => selectCharacter(index); characterButtonsElement.appendChild(button); }); updateCharacterButtonSelection(); }
 
         // --- Preload Assets & Materials ---
-        // --- MODIFIED --- Loads left/right obstacle textures
+        // --- Loads left/right obstacle textures based on OBSTACLE_IMAGES (Unchanged) ---
         function preloadAssets() {
             console.log("Preloading assets...");
             let maxAnisotropy = renderer ? renderer.capabilities.getMaxAnisotropy() : 1;
@@ -122,9 +124,9 @@
             // Load Character Textures
             CHARACTERS.forEach((char, index) => { if (char.imageUrl) { characterTextures[index] = textureLoader.load(char.imageUrl, (texture) => { texture.magFilter = THREE.NearestFilter; texture.anisotropy = maxAnisotropy; texture.needsUpdate = true; }, undefined, (err) => console.error(`Failed texture: ${char.name}`, err) ); } });
 
-            // --- MODIFIED --- Load Obstacle Textures (Both Directions) ---
+            // Load Obstacle Textures (Both Directions)
             obstacleTextures = {}; // Reset
-            for (const typeKey in OBSTACLE_IMAGES) { // Use OBSTACLE_TYPES keys (cc, live_change, on_call)
+            for (const typeKey in OBSTACLE_IMAGES) {
                 const images = OBSTACLE_IMAGES[typeKey];
                 obstacleTextures[typeKey] = {}; // Create sub-object { right: null, left: null }
 
@@ -134,13 +136,13 @@
                     texture.needsUpdate = true;
                 };
 
-                // Load Right-moving texture (e.g., CC.png)
+                // Load Right-moving texture (now e.g., CC R.png)
                 if (images.right) {
                     obstacleTextures[typeKey].right = textureLoader.load(images.right, loadCallback, undefined, (err) => console.error(`Failed texture: ${typeKey} Right (${images.right})`, err));
                 } else {
                     console.warn(`Missing right image for obstacle type: ${typeKey}`);
                 }
-                // Load Left-moving texture (e.g., CC R.png)
+                // Load Left-moving texture (now e.g., CC.png)
                 if (images.left) {
                     obstacleTextures[typeKey].left = textureLoader.load(images.left, loadCallback, undefined, (err) => console.error(`Failed texture: ${typeKey} Left (${images.left})`, err));
                 } else {
@@ -149,7 +151,6 @@
                      obstacleTextures[typeKey].left = obstacleTextures[typeKey].right;
                 }
             }
-            // --- End MODIFIED Obstacle Texture Loading ---
 
             // Lane Materials
             const carpetTexture = createNoiseTexture(64, 64, '#90EE90', '#3CB371'); carpetTexture.repeat.set(8, 8);
@@ -269,6 +270,7 @@
         function addSceneryToLane(laneData) { const sceneryType = Math.random() < 0.6 ? 'desk' : 'plant'; let sceneryMesh; const side = Math.random() < 0.5 ? -1 : 1; const xOffset = (laneLength / 3) + (Math.random() * laneLength / 4); const sceneryX = xOffset * side; const sceneryZ = laneData.z + (Math.random() - 0.5) * laneWidth * 0.8; if (sceneryType === 'desk') { const deskHeight = 1.2; const deskGeo = new THREE.BoxGeometry(2.5, deskHeight, 1.2); sceneryMesh = new THREE.Mesh(deskGeo, sceneryMaterials.desk); sceneryMesh.position.set(sceneryX, deskHeight / 2, sceneryZ); } else { const potHeight = 0.8; const potRadius = 0.5; const potGeo = new THREE.CylinderGeometry(potRadius * 0.8, potRadius, potHeight, 12); const potMesh = new THREE.Mesh(potGeo, sceneryMaterials.plantPot); potMesh.position.set(sceneryX, potHeight / 2, sceneryZ); const leafHeight = 1.0; const leafGeo = new THREE.ConeGeometry(potRadius * 1.2, leafHeight, 8); const leafMesh = new THREE.Mesh(leafGeo, sceneryMaterials.plantLeaf); leafMesh.position.set(sceneryX, potHeight + leafHeight / 2, sceneryZ); sceneryMesh = new THREE.Group(); sceneryMesh.add(potMesh); sceneryMesh.add(leafMesh); } sceneryMesh.castShadow = true; sceneryMesh.receiveShadow = true; scene.add(sceneryMesh); scenery.push(sceneryMesh); }
 
         // --- MODIFIED --- addObstaclesToLane uses correct texture based on direction ---
+        // (Logic unchanged, but uses the swapped OBSTACLE_IMAGES definition)
         function addObstaclesToLane(laneData) {
             const maxObstacles = Math.min(3, 1 + Math.floor(score / 15));
             const numObstacles = Math.floor(Math.random() * maxObstacles) + 1;
@@ -287,16 +289,17 @@
                 const randomTypeKey = availableObstacleTypes[Math.floor(Math.random() * availableObstacleTypes.length)];
                 const obstacleType = OBSTACLE_TYPES[randomTypeKey]; // e.g., "cc"
 
-                // --- MODIFIED --- Select texture based on direction ---
+                // Select texture based on direction using the swapped OBSTACLE_IMAGES
                 const textureSet = obstacleTextures[obstacleType]; // Get { left: Texture, right: Texture }
                 let textureToUse = null;
                 if (textureSet) {
+                    // direction < 0 (moving left) uses textureSet.left (which is now CC.png etc.)
+                    // direction > 0 (moving right) uses textureSet.right (which is now CC R.png etc.)
                     textureToUse = direction < 0 ? textureSet.left : textureSet.right;
                     if (!textureToUse) { // Fallback if one direction is missing
                         textureToUse = textureSet.right || textureSet.left;
                     }
                 }
-                // --- End MODIFIED Texture Selection ---
 
                 const obstacleW = OBSTACLE_PLANE_WIDTH;
                 const obstacleH = OBSTACLE_PLANE_HEIGHT;
@@ -315,12 +318,7 @@
                 if (i > 0) { const spacingToAdd = minSpacing + (numObstacles > 1 ? Math.random() * (randomSpacingPool / (numObstacles - 1)) : 0); currentX -= spacingToAdd * direction; } else { currentX -= (Math.random() * (randomSpacingPool / numObstacles)) * direction; }
                 obstacleMesh.position.set(currentX, obstacleYPosition, laneData.z);
 
-                // --- REMOVED --- Mesh rotation is no longer needed ---
-                // if (direction < 0) {
-                //     obstacleMesh.rotation.y = Math.PI;
-                // }
-                // --- End REMOVED Rotation ---
-
+                // No mesh rotation needed
                 obstacleMesh.castShadow = true;
                 obstacleMesh.receiveShadow = false;
                 scene.add(obstacleMesh);
