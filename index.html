@@ -83,13 +83,11 @@
         const OBSTACLE_TYPES = { CC: 'cc', LIVE_CHANGE: 'live_change', ON_CALL: 'on_call' };
         // Assign images based on user request
         const OBSTACLE_IMAGES = {
-            // right: image for obstacles moving left-to-right (direction > 0) -> USE REGULAR
-            // left: image for obstacles moving right-to-left (direction < 0) -> USE 'R' VERSION
             [OBSTACLE_TYPES.CC]: { right: 'CC.png', left: 'CC R.png' },
             [OBSTACLE_TYPES.LIVE_CHANGE]: { right: 'Live Change.png', left: 'Live Change R.png' },
             [OBSTACLE_TYPES.ON_CALL]: { right: 'On Call.png', left: 'On Call R.png' }
         };
-        let obstacleTextures = {}; // Will store { cc: { right: Texture, left: Texture }, ... }
+        let obstacleTextures = {};
         const OBSTACLE_PLANE_WIDTH = 5.0;
         const OBSTACLE_PLANE_HEIGHT = 5.0;
 
@@ -141,17 +139,23 @@
             console.log("Asset preloading & generation initiated.");
         }
 
-        // --- Initialization (Unchanged) ---
+        // --- Initialization ---
+        // --- MODIFIED --- Added light target to scene
         function init() {
+            // Get DOM Elements
             infoElement = document.getElementById('info'); mainMenuElement = document.getElementById('mainMenu'); scoreboardScreenElement = document.getElementById('scoreboardScreen'); gameOverElement = document.getElementById('gameOver'); characterButtonsElement = document.getElementById('characterButtons'); startGameButton = document.getElementById('startGameButton'); viewScoresButton = document.getElementById('viewScoresButton'); backToMenuButton = document.getElementById('backToMenuButton'); scoreListElement = document.getElementById('scoreList'); noScoresMessageElement = document.getElementById('noScoresMessage'); finalScoreElement = document.getElementById('finalScore'); gameOverReasonElement = document.getElementById('gameOverReason');
+            // Scene Setup
             scene = new THREE.Scene();
+            // Camera Setup
             camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.set(0, 15, 12); camera.lookAt(0, 0, 0);
+            // Renderer Setup
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
             document.body.appendChild(renderer.domElement);
             renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+            // Lighting Setup
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); scene.add(ambientLight);
             const hemiLight = new THREE.HemisphereLight( 0xE8E8FF, 0xB0B0B0, 0.6 ); scene.add( hemiLight );
             directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
@@ -165,14 +169,24 @@
             directionalLight.shadow.camera.right = initialShadowSize;
             directionalLight.shadow.camera.top = initialShadowSize;
             directionalLight.shadow.camera.bottom = -initialShadowSize;
-            directionalLight.shadow.bias = -0.002; scene.add(directionalLight);
+            directionalLight.shadow.bias = -0.002;
+            scene.add(directionalLight);
+            // --- NEW --- Explicitly add the light's target to the scene
+            // The target's initial position is (0,0,0) by default
+            scene.add(directionalLight.target);
+            // --- End NEW ---
+
+            // Preload Assets
             preloadAssets();
+            // UI Setup
             if (characterButtonsElement) populateCharacterButtons(); else console.error("characterButtonsElement not found!");
             if (startGameButton) startGameButton.onclick = startGame; else console.error("startGameButton not found!");
             if (viewScoresButton) viewScoresButton.onclick = () => { displayHighScoresOnScreen(); currentGameState = GAME_STATE.SHOW_SCORES; showOverlay(scoreboardScreenElement); }; else console.error("viewScoresButton not found!");
             if (backToMenuButton) backToMenuButton.onclick = goToMenu; else console.error("backToMenuButton not found!");
+            // Event Listeners
             window.addEventListener('resize', onWindowResize, false);
             document.addEventListener('keydown', onKeyDown, false);
+            // Initial State
             goToMenu();
             animate();
         }
@@ -303,17 +317,33 @@
         // --- Camera Update (Unchanged) ---
         function updateCamera() { if (!player) return; const targetCameraPosition = new THREE.Vector3( player.position.x, camera.position.y, player.position.z + 10 ); camera.position.lerp(targetCameraPosition, 0.04); const targetLookAt = new THREE.Vector3( player.position.x, player.position.y * 0.5, player.position.z - 8 ); const currentLookAt = new THREE.Vector3(); camera.getWorldDirection(currentLookAt).multiplyScalar(15).add(camera.position); currentLookAt.lerp(targetLookAt, 0.05); camera.lookAt(currentLookAt); }
 
-        // --- updateShadowCamera (Unchanged) ---
+        // --- updateShadowCamera ---
+        // --- MODIFIED --- Updates light target position smoothly
         function updateShadowCamera() {
             if (!player || !directionalLight || !directionalLight.shadow) return;
+
             const shadowCam = directionalLight.shadow.camera;
             const shadowSizeH = laneLength / 2 + 10;
-            const shadowSizeV = 100; // Keep increased size
+            // --- MODIFIED --- Increased vertical shadow area slightly more
+            const shadowSizeV = 120; // Was 100
+
+            // Update frustum bounds
             shadowCam.left = player.position.x - shadowSizeH;
             shadowCam.right = player.position.x + shadowSizeH;
             shadowCam.top = player.position.z + shadowSizeV / 2;
             shadowCam.bottom = player.position.z - shadowSizeV / 2;
-            shadowCam.updateProjectionMatrix();
+            shadowCam.updateProjectionMatrix(); // Update bounds
+
+            // --- NEW --- Update light target smoothly
+            if (directionalLight.target) {
+                // Target a point slightly ahead of the player on the ground plane
+                const targetPos = new THREE.Vector3(player.position.x, 0, player.position.z - 15); // Target further ahead
+                // Smoothly move the light's target towards this point using lerp
+                directionalLight.target.position.lerp(targetPos, 0.05); // Adjust lerp factor for smoothness (smaller = smoother)
+                // Optional: If target matrix isn't automatically updated by renderer/light
+                // directionalLight.target.updateMatrixWorld();
+            }
+            // --- End NEW ---
         }
 
 
@@ -330,88 +360,24 @@
             wallSegments = wallSegments.filter(segment => { if (segment.z < cleanupThresholdZ) return true; else { if (segment.mesh.parent) scene.remove(segment.mesh); return false; } });
         }
 
-        // --- MODIFIED --- Controls - Water check runs for ALL moves ---
+        // --- Controls (Unchanged) ---
         function onKeyDown(event) {
             if (currentGameState !== GAME_STATE.PLAYING || isMoving) return;
-
-            let moved = false;
-            const currentX = playerPosition.x;
-            const currentZ = playerPosition.z;
-            const moveAmount = laneWidth;
-            let targetX = currentX;
-            let targetZ = currentZ;
-            let isForwardMove = false;
-
-            // Determine target position
-            switch (event.key) {
-                case 'ArrowUp': case 'w':
-                    targetZ = currentZ - moveAmount; targetX = currentX; moved = true; isForwardMove = true; break;
-                case 'ArrowLeft': case 'a':
-                    targetX = currentX - moveAmount; targetZ = currentZ; moved = true; break;
-                case 'ArrowRight': case 'd':
-                    targetX = currentX + moveAmount; targetZ = currentZ; moved = true; break;
-                case 'ArrowDown': case 's':
-                    targetZ = currentZ + moveAmount; targetX = currentX; moved = true; break;
-            }
-
+            let moved = false; const currentX = playerPosition.x; const currentZ = playerPosition.z; const moveAmount = laneWidth; let targetX = currentX; let targetZ = currentZ; let isForwardMove = false;
+            switch (event.key) { case 'ArrowUp': case 'w': targetZ = currentZ - moveAmount; targetX = currentX; moved = true; isForwardMove = true; break; case 'ArrowLeft': case 'a': targetX = currentX - moveAmount; targetZ = currentZ; moved = true; break; case 'ArrowRight': case 'd': targetX = currentX + moveAmount; targetZ = currentZ; moved = true; break; case 'ArrowDown': case 's': targetZ = currentZ + moveAmount; targetX = currentX; moved = true; break; }
             if (moved) {
-                let allowMove = true;
-                const playerChar = CHARACTERS[selectedCharacterIndex];
-                const playerW = playerChar.width;
-                const playerH = playerChar.height;
-
-                // 1. Check Wall Boundaries
+                let allowMove = true; const playerChar = CHARACTERS[selectedCharacterIndex]; const playerW = playerChar.width; const playerH = playerChar.height;
                 const wallBoundary = laneLength / 2 - playerW / 2;
-                if (targetX > wallBoundary || targetX < -wallBoundary) {
-                    allowMove = false;
-                }
-
-                // 2. Check Water Lane Safety (Runs for ANY potential move if allowMove is still true)
-                if (allowMove) { // Check only if not already blocked by wall
-                    const targetLane = lanes.find(lane => Math.abs(lane.z - targetZ) < 0.1); // Find the lane at the target Z
-
-                    if (targetLane && targetLane.type === LANE_TYPES.WATER) {
-                        // Calculate player's potential bounding box at target
-                        const targetCenter = new THREE.Vector3(targetX, playerH / 2, targetZ);
-                        const targetSize = new THREE.Vector3(playerW, playerH, 0.5);
-                        const targetPlayerBox = new THREE.Box3().setFromCenterAndSize(targetCenter, targetSize);
-
-                        // Check intersection with safe spot bounding boxes
-                        let isSafe = false;
-                        targetLane.safeSpots.forEach(spot => {
-                            if (spot.boundingBox && targetPlayerBox.intersectsBox(spot.boundingBox)) {
-                                isSafe = true;
-                            }
-                        });
-
-                        if (!isSafe) {
-                            // console.log("Landed in water! (No BBox intersection)"); // Keep logs minimal
-                            triggerGameOver("drowned");
-                            allowMove = false; // Disallow the move
-                        } else {
-                            // console.log("Landed on safe spot! (BBox intersection confirmed)"); // Keep logs minimal
-                        }
-                    }
-                }
-
-                // 3. Finalize Move if Allowed
+                if (targetX > wallBoundary || targetX < -wallBoundary) { allowMove = false; }
                 if (allowMove) {
-                    targetPlayerPosition.x = targetX;
-                    targetPlayerPosition.z = targetZ;
-                    isMoving = true;
-                    moveStartTime = clock.elapsedTime * 1000;
-                    lastMoveTime = clock.elapsedTime;
-
-                    // Increment score ONLY on successful forward move
-                    if (isForwardMove) {
-                        score++;
-                        infoElement.innerText = `Score: ${score}`;
+                    const targetLane = lanes.find(lane => Math.abs(lane.z - targetZ) < 0.1);
+                    if (targetLane && targetLane.type === LANE_TYPES.WATER) {
+                        const targetCenter = new THREE.Vector3(targetX, playerH / 2, targetZ); const targetSize = new THREE.Vector3(playerW, playerH, 0.5); const targetPlayerBox = new THREE.Box3().setFromCenterAndSize(targetCenter, targetSize);
+                        let isSafe = false; targetLane.safeSpots.forEach(spot => { if (spot.boundingBox && targetPlayerBox.intersectsBox(spot.boundingBox)) { isSafe = true; } });
+                        if (!isSafe) { triggerGameOver("drowned"); allowMove = false; }
                     }
-                } else {
-                    // If move was disallowed, reset target position visually
-                    targetPlayerPosition.x = currentX;
-                    targetPlayerPosition.z = currentZ;
                 }
+                if (allowMove) { targetPlayerPosition.x = targetX; targetPlayerPosition.z = targetZ; isMoving = true; moveStartTime = clock.elapsedTime * 1000; lastMoveTime = clock.elapsedTime; if (isForwardMove) { score++; infoElement.innerText = `Score: ${score}`; } } else { targetPlayerPosition.x = currentX; targetPlayerPosition.z = currentZ; }
             }
         }
 
