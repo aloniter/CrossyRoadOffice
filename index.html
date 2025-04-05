@@ -81,7 +81,7 @@
 
         // --- Obstacle Definitions ---
         const OBSTACLE_TYPES = { CC: 'cc', LIVE_CHANGE: 'live_change', ON_CALL: 'on_call' };
-        // --- *** CORRECTED *** --- Assign images based on user request ---
+        // Assign images based on user request
         const OBSTACLE_IMAGES = {
             // right: image for obstacles moving left-to-right (direction > 0) -> USE REGULAR
             // left: image for obstacles moving right-to-left (direction < 0) -> USE 'R' VERSION
@@ -115,52 +115,25 @@
         function updateCharacterButtonSelection() { const buttons = characterButtonsElement.querySelectorAll('.char-button'); buttons.forEach((button, index) => { if (index === selectedCharacterIndex) button.classList.add('selected'); else button.classList.remove('selected'); }); }
         function populateCharacterButtons() { characterButtonsElement.innerHTML = ''; CHARACTERS.forEach((char, index) => { const button = document.createElement('button'); button.textContent = char.name; button.classList.add('char-button'); button.onclick = () => selectCharacter(index); characterButtonsElement.appendChild(button); }); updateCharacterButtonSelection(); }
 
-        // --- Preload Assets & Materials ---
-        // --- Loads left/right obstacle textures based on OBSTACLE_IMAGES (Unchanged) ---
+        // --- Preload Assets & Materials (Unchanged) ---
         function preloadAssets() {
             console.log("Preloading assets...");
             let maxAnisotropy = renderer ? renderer.capabilities.getMaxAnisotropy() : 1;
-
-            // Load Character Textures
             CHARACTERS.forEach((char, index) => { if (char.imageUrl) { characterTextures[index] = textureLoader.load(char.imageUrl, (texture) => { texture.magFilter = THREE.NearestFilter; texture.anisotropy = maxAnisotropy; texture.needsUpdate = true; }, undefined, (err) => console.error(`Failed texture: ${char.name}`, err) ); } });
-
-            // Load Obstacle Textures (Both Directions)
-            obstacleTextures = {}; // Reset
+            obstacleTextures = {};
             for (const typeKey in OBSTACLE_IMAGES) {
                 const images = OBSTACLE_IMAGES[typeKey];
-                obstacleTextures[typeKey] = {}; // Create sub-object { right: null, left: null }
-
-                const loadCallback = (texture) => {
-                    texture.magFilter = THREE.NearestFilter;
-                    texture.anisotropy = maxAnisotropy;
-                    texture.needsUpdate = true;
-                };
-
-                // Load Right-moving texture (now e.g., CC.png)
-                if (images.right) {
-                    obstacleTextures[typeKey].right = textureLoader.load(images.right, loadCallback, undefined, (err) => console.error(`Failed texture: ${typeKey} Right (${images.right})`, err));
-                } else {
-                    console.warn(`Missing right image for obstacle type: ${typeKey}`);
-                }
-                // Load Left-moving texture (now e.g., CC R.png)
-                if (images.left) {
-                    obstacleTextures[typeKey].left = textureLoader.load(images.left, loadCallback, undefined, (err) => console.error(`Failed texture: ${typeKey} Left (${images.left})`, err));
-                } else {
-                     console.warn(`Missing left image for obstacle type: ${typeKey}`);
-                     // Fallback: Use the right texture if left is missing
-                     obstacleTextures[typeKey].left = obstacleTextures[typeKey].right;
-                }
+                obstacleTextures[typeKey] = {};
+                const loadCallback = (texture) => { texture.magFilter = THREE.NearestFilter; texture.anisotropy = maxAnisotropy; texture.needsUpdate = true; };
+                if (images.right) { obstacleTextures[typeKey].right = textureLoader.load(images.right, loadCallback, undefined, (err) => console.error(`Failed texture: ${typeKey} Right (${images.right})`, err)); } else { console.warn(`Missing right image for obstacle type: ${typeKey}`); }
+                if (images.left) { obstacleTextures[typeKey].left = textureLoader.load(images.left, loadCallback, undefined, (err) => console.error(`Failed texture: ${typeKey} Left (${images.left})`, err)); } else { console.warn(`Missing left image for obstacle type: ${typeKey}`); obstacleTextures[typeKey].left = obstacleTextures[typeKey].right; }
             }
-
-            // Lane Materials
             const carpetTexture = createNoiseTexture(64, 64, '#90EE90', '#3CB371'); carpetTexture.repeat.set(8, 8);
             laneMaterials[LANE_TYPES.CARPET] = new THREE.MeshStandardMaterial({ map: carpetTexture, roughness: 0.9, metalness: 0.05 });
             const walkwayTexture = createTileTexture(64, 64, '#E07A5F', '#D45D3D', 24); walkwayTexture.repeat.set(8, 8);
             laneMaterials[LANE_TYPES.WALKWAY] = new THREE.MeshStandardMaterial({ map: walkwayTexture, roughness: 0.4, metalness: 0.1 });
             laneMaterials[LANE_TYPES.WATER] = new THREE.MeshStandardMaterial({ color: WATER_COLOR, roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.85 });
-            // Wall Material
             wallMaterial = new THREE.MeshStandardMaterial({ color: 0xFFEBCD, roughness: 0.9, metalness: 0.0 });
-            // Scenery Materials
             sceneryMaterials.desk = new THREE.MeshStandardMaterial({ color: SCENERY_COLORS.DESK, roughness: 0.8, metalness: 0.1 });
             sceneryMaterials.plantPot = new THREE.MeshStandardMaterial({ color: SCENERY_COLORS.PLANT_POT, roughness: 0.7, metalness: 0.1 });
             sceneryMaterials.plantLeaf = new THREE.MeshStandardMaterial({ color: SCENERY_COLORS.PLANT_LEAF, roughness: 0.8, metalness: 0.0 });
@@ -168,22 +141,17 @@
             console.log("Asset preloading & generation initiated.");
         }
 
-        // --- Initialization (Unchanged from previous fix) ---
+        // --- Initialization (Unchanged) ---
         function init() {
-            // Get DOM Elements
             infoElement = document.getElementById('info'); mainMenuElement = document.getElementById('mainMenu'); scoreboardScreenElement = document.getElementById('scoreboardScreen'); gameOverElement = document.getElementById('gameOver'); characterButtonsElement = document.getElementById('characterButtons'); startGameButton = document.getElementById('startGameButton'); viewScoresButton = document.getElementById('viewScoresButton'); backToMenuButton = document.getElementById('backToMenuButton'); scoreListElement = document.getElementById('scoreList'); noScoresMessageElement = document.getElementById('noScoresMessage'); finalScoreElement = document.getElementById('finalScore'); gameOverReasonElement = document.getElementById('gameOverReason');
-            // Scene Setup
             scene = new THREE.Scene();
-            // Camera Setup
             camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.set(0, 15, 12); camera.lookAt(0, 0, 0);
-            // Renderer Setup
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
             document.body.appendChild(renderer.domElement);
             renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
-            // Lighting Setup
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); scene.add(ambientLight);
             const hemiLight = new THREE.HemisphereLight( 0xE8E8FF, 0xB0B0B0, 0.6 ); scene.add( hemiLight );
             directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
@@ -191,24 +159,20 @@
             directionalLight.castShadow = true;
             directionalLight.shadow.mapSize.width = 2048; directionalLight.shadow.mapSize.height = 2048;
             directionalLight.shadow.camera.near = 1;
-            directionalLight.shadow.camera.far = 200; // Keep increased far plane
+            directionalLight.shadow.camera.far = 200;
             const initialShadowSize = laneLength / 2 + 10;
             directionalLight.shadow.camera.left = -initialShadowSize;
             directionalLight.shadow.camera.right = initialShadowSize;
             directionalLight.shadow.camera.top = initialShadowSize;
             directionalLight.shadow.camera.bottom = -initialShadowSize;
             directionalLight.shadow.bias = -0.002; scene.add(directionalLight);
-            // Preload Assets
             preloadAssets();
-            // UI Setup
             if (characterButtonsElement) populateCharacterButtons(); else console.error("characterButtonsElement not found!");
             if (startGameButton) startGameButton.onclick = startGame; else console.error("startGameButton not found!");
             if (viewScoresButton) viewScoresButton.onclick = () => { displayHighScoresOnScreen(); currentGameState = GAME_STATE.SHOW_SCORES; showOverlay(scoreboardScreenElement); }; else console.error("viewScoresButton not found!");
             if (backToMenuButton) backToMenuButton.onclick = goToMenu; else console.error("backToMenuButton not found!");
-            // Event Listeners
             window.addEventListener('resize', onWindowResize, false);
             document.addEventListener('keydown', onKeyDown, false);
-            // Initial State
             goToMenu();
             animate();
         }
@@ -218,7 +182,7 @@
             console.log("Starting game..."); score = 0; playerPosition = { x: 0, z: 0 }; targetPlayerPosition = { x: 0, z: 0 }; lastLaneZ = 0; isMoving = false; infoElement.innerText = `Score: ${score}`; lastMoveTime = clock.elapsedTime; clearGameObjects(); createPlayer(); createLane(LANE_TYPES.CARPET, 0); for (let i = 1; i < generationDistance; i++) { generateLane(); } camera.position.set(0, 15, 12); camera.lookAt(0, 0, 0); currentGameState = GAME_STATE.PLAYING; showOverlay(null); infoElement.classList.remove('hidden'); if (!clock.running) clock.start(); if (!animationFrameId) animate();
         }
 
-        // --- Clear Game Objects (Unchanged from previous fix) ---
+        // --- Clear Game Objects (Unchanged) ---
         function clearGameObjects() {
             console.log("Clearing game objects...");
             for (let i = obstacles.length - 1; i >= 0; i--) { if (obstacles[i].mesh.parent) scene.remove(obstacles[i].mesh); } obstacles = [];
@@ -238,7 +202,7 @@
         }
 
         // --- Lane Generation Functions ---
-        // createLane (Unchanged from previous fix)
+        // createLane (Unchanged)
         function createLane(type, zPos) {
             const laneGeometry = new THREE.PlaneGeometry(laneLength, laneWidth); const laneMaterial = laneMaterials[type] || new THREE.MeshStandardMaterial({color: 0xff00ff}); let laneData = { mesh: null, type: type, z: zPos, obstacles: [], safeSpots: [] }; const laneMesh = new THREE.Mesh(laneGeometry, laneMaterial); laneMesh.rotation.x = -Math.PI / 2; laneMesh.position.set(0, 0, zPos); laneMesh.receiveShadow = true; scene.add(laneMesh); laneData.mesh = laneMesh; lanes.push(laneData);
             if (type === LANE_TYPES.WALKWAY && zPos < -laneWidth) { addObstaclesToLane(laneData); } else if (type === LANE_TYPES.CARPET) { const sceneryChance = 0.20; if (Math.random() < sceneryChance) addSceneryToLane(laneData); } else if (type === LANE_TYPES.WATER) { addSafeSpotsToLane(laneData); }
@@ -252,7 +216,7 @@
             createLane(laneType, nextZ);
         }
 
-        // addSafeSpotsToLane (Unchanged from previous fix)
+        // addSafeSpotsToLane (Unchanged)
         function addSafeSpotsToLane(laneData) {
             const numSpots = Math.floor(Math.random() * 3) + 2; const spotWidth = laneWidth * 0.8; const spotDepth = laneWidth * 0.8; const spotHeight = 0.2; const spotGeometry = new THREE.BoxGeometry(spotWidth, spotHeight, spotDepth); const spotMaterial = sceneryMaterials.safeSpot; const possiblePositions = []; const halfPlayerWidthApprox = (CHARACTERS[selectedCharacterIndex].width / 2) || 1.1;
             for (let x = -laneLength / 2 + spotWidth / 2; x <= laneLength / 2 - spotWidth / 2; x += laneWidth) { if (Math.abs(x) < laneLength / 2 - halfPlayerWidthApprox) { possiblePositions.push(x); } }
@@ -261,7 +225,7 @@
             spotPositionsX.forEach(posX => { const spotMesh = new THREE.Mesh(spotGeometry, spotMaterial); spotMesh.position.set(posX, spotHeight / 2, laneData.z); spotMesh.castShadow = true; spotMesh.receiveShadow = true; scene.add(spotMesh); const spotBox = new THREE.Box3().setFromObject(spotMesh); const spotData = { mesh: spotMesh, x: posX, z: laneData.z, boundingBox: spotBox }; laneData.safeSpots.push(spotData); safeSpots.push(spotData); });
         }
 
-        // createWallSegment (Unchanged from previous fix)
+        // createWallSegment (Unchanged)
         function createWallSegment(zPos, side) {
             const wallSegmentGeometry = new THREE.BoxGeometry(WALL_THICKNESS, WALL_HEIGHT, laneWidth); const wallX = side * (laneLength / 2 + WALL_THICKNESS / 2); const wallY = WALL_HEIGHT / 2; const wallSegmentMesh = new THREE.Mesh(wallSegmentGeometry, wallMaterial); wallSegmentMesh.position.set(wallX, wallY, zPos); wallSegmentMesh.receiveShadow = true; scene.add(wallSegmentMesh); wallSegments.push({ mesh: wallSegmentMesh, z: zPos });
         }
@@ -269,8 +233,7 @@
         // addSceneryToLane (Unchanged)
         function addSceneryToLane(laneData) { const sceneryType = Math.random() < 0.6 ? 'desk' : 'plant'; let sceneryMesh; const side = Math.random() < 0.5 ? -1 : 1; const xOffset = (laneLength / 3) + (Math.random() * laneLength / 4); const sceneryX = xOffset * side; const sceneryZ = laneData.z + (Math.random() - 0.5) * laneWidth * 0.8; if (sceneryType === 'desk') { const deskHeight = 1.2; const deskGeo = new THREE.BoxGeometry(2.5, deskHeight, 1.2); sceneryMesh = new THREE.Mesh(deskGeo, sceneryMaterials.desk); sceneryMesh.position.set(sceneryX, deskHeight / 2, sceneryZ); } else { const potHeight = 0.8; const potRadius = 0.5; const potGeo = new THREE.CylinderGeometry(potRadius * 0.8, potRadius, potHeight, 12); const potMesh = new THREE.Mesh(potGeo, sceneryMaterials.plantPot); potMesh.position.set(sceneryX, potHeight / 2, sceneryZ); const leafHeight = 1.0; const leafGeo = new THREE.ConeGeometry(potRadius * 1.2, leafHeight, 8); const leafMesh = new THREE.Mesh(leafGeo, sceneryMaterials.plantLeaf); leafMesh.position.set(sceneryX, potHeight + leafHeight / 2, sceneryZ); sceneryMesh = new THREE.Group(); sceneryMesh.add(potMesh); sceneryMesh.add(leafMesh); } sceneryMesh.castShadow = true; sceneryMesh.receiveShadow = true; scene.add(sceneryMesh); scenery.push(sceneryMesh); }
 
-        // --- addObstaclesToLane ---
-        // (Uses correct texture based on direction via OBSTACLE_IMAGES - Unchanged)
+        // addObstaclesToLane (Unchanged)
         function addObstaclesToLane(laneData) {
             const maxObstacles = Math.min(3, 1 + Math.floor(score / 15));
             const numObstacles = Math.floor(Math.random() * maxObstacles) + 1;
@@ -312,7 +275,6 @@
                 if (i > 0) { const spacingToAdd = minSpacing + (numObstacles > 1 ? Math.random() * (randomSpacingPool / (numObstacles - 1)) : 0); currentX -= spacingToAdd * direction; } else { currentX -= (Math.random() * (randomSpacingPool / numObstacles)) * direction; }
                 obstacleMesh.position.set(currentX, obstacleYPosition, laneData.z);
 
-                // No mesh rotation
                 obstacleMesh.castShadow = true;
                 obstacleMesh.receiveShadow = false;
                 scene.add(obstacleMesh);
@@ -324,7 +286,7 @@
             }
         }
 
-        // --- Game Loop (Unchanged from previous fix) ---
+        // --- Game Loop (Unchanged) ---
         function animate() {
             animationFrameId = requestAnimationFrame(animate); const deltaTime = clock.getDelta();
             if (currentGameState === GAME_STATE.PLAYING && !isMoving) { const idleTime = clock.elapsedTime - lastMoveTime; if (idleTime > MAX_IDLE_TIME) { console.log("Idle time exceeded!"); triggerGameOver("idle"); } }
@@ -341,7 +303,7 @@
         // --- Camera Update (Unchanged) ---
         function updateCamera() { if (!player) return; const targetCameraPosition = new THREE.Vector3( player.position.x, camera.position.y, player.position.z + 10 ); camera.position.lerp(targetCameraPosition, 0.04); const targetLookAt = new THREE.Vector3( player.position.x, player.position.y * 0.5, player.position.z - 8 ); const currentLookAt = new THREE.Vector3(); camera.getWorldDirection(currentLookAt).multiplyScalar(15).add(camera.position); currentLookAt.lerp(targetLookAt, 0.05); camera.lookAt(currentLookAt); }
 
-        // --- updateShadowCamera (Unchanged from previous fix) ---
+        // --- updateShadowCamera (Unchanged) ---
         function updateShadowCamera() {
             if (!player || !directionalLight || !directionalLight.shadow) return;
             const shadowCam = directionalLight.shadow.camera;
@@ -358,7 +320,7 @@
         // --- Collision Check (Obstacles - Unchanged) ---
         function checkCollisions() { if (!player || isMoving || currentGameState !== GAME_STATE.PLAYING) { return; } if (player.geometry.type === 'PlaneGeometry') { const character = CHARACTERS[selectedCharacterIndex]; playerBoundingBox.setFromCenterAndSize(player.position, new THREE.Vector3(character.width, character.height, 0.5)); } else { playerBoundingBox.setFromObject(player); } obstacles.forEach(obstacle => { if (Math.abs(player.position.z - obstacle.laneZ) < laneWidth / 2) { if (playerBoundingBox.intersectsBox(obstacle.boundingBox)) { console.log("Collision Detected with obstacle!"); triggerGameOver("collision"); } } }); }
 
-        // --- Cleanup Environment (Unchanged from previous fix) ---
+        // --- Cleanup Environment (Unchanged) ---
         function cleanupEnvironment() {
             const cleanupThresholdZ = (player ? player.position.z : 0) + (cleanupBuffer * laneWidth);
             lanes = lanes.filter(lane => { if (lane.z < cleanupThresholdZ) return true; else { lane.obstacles.forEach(obstacle => { const index = obstacles.indexOf(obstacle); if (index > -1) obstacles.splice(index, 1); if (obstacle.mesh.parent) scene.remove(obstacle.mesh); }); lane.safeSpots.forEach(spot => { const index = safeSpots.indexOf(spot); if (index > -1) safeSpots.splice(index, 1); if (spot.mesh.parent) scene.remove(spot.mesh); }); if (lane.mesh.parent) scene.remove(lane.mesh); return false; } });
@@ -368,23 +330,88 @@
             wallSegments = wallSegments.filter(segment => { if (segment.z < cleanupThresholdZ) return true; else { if (segment.mesh.parent) scene.remove(segment.mesh); return false; } });
         }
 
-        // --- Controls (Unchanged from previous fix) ---
+        // --- MODIFIED --- Controls - Water check runs for ALL moves ---
         function onKeyDown(event) {
             if (currentGameState !== GAME_STATE.PLAYING || isMoving) return;
-            let moved = false; const currentX = playerPosition.x; const currentZ = playerPosition.z; const moveAmount = laneWidth; let targetX = currentX; let targetZ = currentZ; let isForwardMove = false;
-            switch (event.key) { case 'ArrowUp': case 'w': targetZ = currentZ - moveAmount; targetX = currentX; moved = true; isForwardMove = true; break; case 'ArrowLeft': case 'a': targetX = currentX - moveAmount; targetZ = currentZ; moved = true; break; case 'ArrowRight': case 'd': targetX = currentX + moveAmount; targetZ = currentZ; moved = true; break; case 'ArrowDown': case 's': targetZ = currentZ + moveAmount; targetX = currentX; moved = true; break; }
+
+            let moved = false;
+            const currentX = playerPosition.x;
+            const currentZ = playerPosition.z;
+            const moveAmount = laneWidth;
+            let targetX = currentX;
+            let targetZ = currentZ;
+            let isForwardMove = false;
+
+            // Determine target position
+            switch (event.key) {
+                case 'ArrowUp': case 'w':
+                    targetZ = currentZ - moveAmount; targetX = currentX; moved = true; isForwardMove = true; break;
+                case 'ArrowLeft': case 'a':
+                    targetX = currentX - moveAmount; targetZ = currentZ; moved = true; break;
+                case 'ArrowRight': case 'd':
+                    targetX = currentX + moveAmount; targetZ = currentZ; moved = true; break;
+                case 'ArrowDown': case 's':
+                    targetZ = currentZ + moveAmount; targetX = currentX; moved = true; break;
+            }
+
             if (moved) {
-                let allowMove = true; const playerChar = CHARACTERS[selectedCharacterIndex]; const playerW = playerChar.width; const playerH = playerChar.height; const wallBoundary = laneLength / 2 - playerW / 2;
-                if (targetX > wallBoundary || targetX < -wallBoundary) { allowMove = false; }
-                if (allowMove && targetZ !== currentZ) {
-                    const targetLane = lanes.find(lane => Math.abs(lane.z - targetZ) < 0.1);
+                let allowMove = true;
+                const playerChar = CHARACTERS[selectedCharacterIndex];
+                const playerW = playerChar.width;
+                const playerH = playerChar.height;
+
+                // 1. Check Wall Boundaries
+                const wallBoundary = laneLength / 2 - playerW / 2;
+                if (targetX > wallBoundary || targetX < -wallBoundary) {
+                    allowMove = false;
+                }
+
+                // 2. Check Water Lane Safety (Runs for ANY potential move if allowMove is still true)
+                if (allowMove) { // Check only if not already blocked by wall
+                    const targetLane = lanes.find(lane => Math.abs(lane.z - targetZ) < 0.1); // Find the lane at the target Z
+
                     if (targetLane && targetLane.type === LANE_TYPES.WATER) {
-                        const targetCenter = new THREE.Vector3(targetX, playerH / 2, targetZ); const targetSize = new THREE.Vector3(playerW, playerH, 0.5); const targetPlayerBox = new THREE.Box3().setFromCenterAndSize(targetCenter, targetSize);
-                        let isSafe = false; targetLane.safeSpots.forEach(spot => { if (spot.boundingBox && targetPlayerBox.intersectsBox(spot.boundingBox)) { isSafe = true; } });
-                        if (!isSafe) { triggerGameOver("drowned"); allowMove = false; }
+                        // Calculate player's potential bounding box at target
+                        const targetCenter = new THREE.Vector3(targetX, playerH / 2, targetZ);
+                        const targetSize = new THREE.Vector3(playerW, playerH, 0.5);
+                        const targetPlayerBox = new THREE.Box3().setFromCenterAndSize(targetCenter, targetSize);
+
+                        // Check intersection with safe spot bounding boxes
+                        let isSafe = false;
+                        targetLane.safeSpots.forEach(spot => {
+                            if (spot.boundingBox && targetPlayerBox.intersectsBox(spot.boundingBox)) {
+                                isSafe = true;
+                            }
+                        });
+
+                        if (!isSafe) {
+                            // console.log("Landed in water! (No BBox intersection)"); // Keep logs minimal
+                            triggerGameOver("drowned");
+                            allowMove = false; // Disallow the move
+                        } else {
+                            // console.log("Landed on safe spot! (BBox intersection confirmed)"); // Keep logs minimal
+                        }
                     }
                 }
-                if (allowMove) { targetPlayerPosition.x = targetX; targetPlayerPosition.z = targetZ; isMoving = true; moveStartTime = clock.elapsedTime * 1000; lastMoveTime = clock.elapsedTime; if (isForwardMove) { score++; infoElement.innerText = `Score: ${score}`; } } else { targetPlayerPosition.x = currentX; targetPlayerPosition.z = currentZ; }
+
+                // 3. Finalize Move if Allowed
+                if (allowMove) {
+                    targetPlayerPosition.x = targetX;
+                    targetPlayerPosition.z = targetZ;
+                    isMoving = true;
+                    moveStartTime = clock.elapsedTime * 1000;
+                    lastMoveTime = clock.elapsedTime;
+
+                    // Increment score ONLY on successful forward move
+                    if (isForwardMove) {
+                        score++;
+                        infoElement.innerText = `Score: ${score}`;
+                    }
+                } else {
+                    // If move was disallowed, reset target position visually
+                    targetPlayerPosition.x = currentX;
+                    targetPlayerPosition.z = currentZ;
+                }
             }
         }
 
