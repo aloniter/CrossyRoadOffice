@@ -236,16 +236,60 @@
         // addSceneryToLane (Unchanged)
         function addSceneryToLane(laneData) { const sceneryType = Math.random() < 0.6 ? 'desk' : 'plant'; let sceneryMesh; const side = Math.random() < 0.5 ? -1 : 1; const xOffset = (laneLength / 3) + (Math.random() * laneLength / 4); const sceneryX = xOffset * side; const sceneryZ = laneData.z + (Math.random() - 0.5) * laneWidth * 0.8; if (sceneryType === 'desk') { const deskHeight = 1.2; const deskGeo = new THREE.BoxGeometry(2.5, deskHeight, 1.2); sceneryMesh = new THREE.Mesh(deskGeo, sceneryMaterials.desk); sceneryMesh.position.set(sceneryX, deskHeight / 2, sceneryZ); } else { const potHeight = 0.8; const potRadius = 0.5; const potGeo = new THREE.CylinderGeometry(potRadius * 0.8, potRadius, potHeight, 12); const potMesh = new THREE.Mesh(potGeo, sceneryMaterials.plantPot); potMesh.position.set(sceneryX, potHeight / 2, sceneryZ); const leafHeight = 1.0; const leafGeo = new THREE.ConeGeometry(potRadius * 1.2, leafHeight, 8); const leafMesh = new THREE.Mesh(leafGeo, sceneryMaterials.plantLeaf); leafMesh.position.set(sceneryX, potHeight + leafHeight / 2, sceneryZ); sceneryMesh = new THREE.Group(); sceneryMesh.add(potMesh); sceneryMesh.add(leafMesh); } sceneryMesh.castShadow = true; sceneryMesh.receiveShadow = true; scene.add(sceneryMesh); scenery.push(sceneryMesh); }
 
-        // addObstaclesToLane (Unchanged from previous fix)
+        // --- MODIFIED --- addObstaclesToLane uses MESH ROTATION now ---
         function addObstaclesToLane(laneData) {
-            const maxObstacles = Math.min(3, 1 + Math.floor(score / 15)); const numObstacles = Math.floor(Math.random() * maxObstacles) + 1; const speedMultiplier = 1 + Math.min(1.5, score / 80); const baseSpeed = (0.08 + Math.random() * 0.10) * speedMultiplier; const speed = baseSpeed * (Math.random() < 0.5 ? 1 : -1); const direction = Math.sign(speed); const startEdge = (laneLength / 2 + 5) * direction * -1; const minSpacing = OBSTACLE_PLANE_WIDTH + 2.0; const totalSpacingNeeded = (numObstacles -1) * minSpacing; const randomSpacingPool = Math.max(0, laneLength - totalSpacingNeeded - OBSTACLE_PLANE_WIDTH * numObstacles); let currentX = startEdge; const availableObstacleTypes = Object.keys(OBSTACLE_TYPES);
+            const maxObstacles = Math.min(3, 1 + Math.floor(score / 15));
+            const numObstacles = Math.floor(Math.random() * maxObstacles) + 1;
+            const speedMultiplier = 1 + Math.min(1.5, score / 80);
+            const baseSpeed = (0.08 + Math.random() * 0.10) * speedMultiplier;
+            const speed = baseSpeed * (Math.random() < 0.5 ? 1 : -1);
+            const direction = Math.sign(speed); // -1 for left, 1 for right
+            const startEdge = (laneLength / 2 + 5) * direction * -1;
+            const minSpacing = OBSTACLE_PLANE_WIDTH + 2.0;
+            const totalSpacingNeeded = (numObstacles -1) * minSpacing;
+            const randomSpacingPool = Math.max(0, laneLength - totalSpacingNeeded - OBSTACLE_PLANE_WIDTH * numObstacles);
+            let currentX = startEdge;
+            const availableObstacleTypes = Object.keys(OBSTACLE_TYPES);
+
             for (let i = 0; i < numObstacles; i++) {
-                const randomTypeKey = availableObstacleTypes[Math.floor(Math.random() * availableObstacleTypes.length)]; const obstacleType = OBSTACLE_TYPES[randomTypeKey]; const originalTexture = obstacleTextures[obstacleType]; let textureToUse = originalTexture;
-                if (direction < 0 && originalTexture) { textureToUse = originalTexture.clone(); textureToUse.needsUpdate = true; textureToUse.repeat.x = -1; textureToUse.wrapS = THREE.RepeatWrapping; textureToUse.offset.x = 1; }
-                const obstacleW = OBSTACLE_PLANE_WIDTH; const obstacleH = OBSTACLE_PLANE_HEIGHT; const obstacleYPosition = obstacleH / 2; const obstacleGeometry = new THREE.PlaneGeometry(obstacleW, obstacleH); const obstacleMaterial = new THREE.MeshBasicMaterial({ map: textureToUse || null, color: textureToUse ? 0xffffff : DEFAULT_OBSTACLE_COLOR, transparent: true, side: THREE.DoubleSide }); const obstacleMesh = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
+                const randomTypeKey = availableObstacleTypes[Math.floor(Math.random() * availableObstacleTypes.length)];
+                const obstacleType = OBSTACLE_TYPES[randomTypeKey];
+                const originalTexture = obstacleTextures[obstacleType]; // Get the original texture
+
+                // --- REMOVED --- Texture flipping logic is removed ---
+
+                const obstacleW = OBSTACLE_PLANE_WIDTH;
+                const obstacleH = OBSTACLE_PLANE_HEIGHT;
+                const obstacleYPosition = obstacleH / 2;
+                const obstacleGeometry = new THREE.PlaneGeometry(obstacleW, obstacleH);
+                // Use the original texture directly
+                const obstacleMaterial = new THREE.MeshBasicMaterial({
+                    map: originalTexture || null, // Use original texture
+                    color: originalTexture ? 0xffffff : DEFAULT_OBSTACLE_COLOR,
+                    transparent: true,
+                    side: THREE.DoubleSide
+                });
+                const obstacleMesh = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
+
+                // Position calculation
                 if (i > 0) { const spacingToAdd = minSpacing + (numObstacles > 1 ? Math.random() * (randomSpacingPool / (numObstacles - 1)) : 0); currentX -= spacingToAdd * direction; } else { currentX -= (Math.random() * (randomSpacingPool / numObstacles)) * direction; }
-                obstacleMesh.position.set(currentX, obstacleYPosition, laneData.z); obstacleMesh.castShadow = true; obstacleMesh.receiveShadow = false; scene.add(obstacleMesh);
-                const obstacleBoundingBox = new THREE.Box3().setFromCenterAndSize( obstacleMesh.position, new THREE.Vector3(obstacleW, obstacleH, 0.5) ); const obstacleData = { mesh: obstacleMesh, boundingBox: obstacleBoundingBox, speed: speed, direction: direction, laneZ: laneData.z, type: obstacleType }; obstacles.push(obstacleData); laneData.obstacles.push(obstacleData);
+                obstacleMesh.position.set(currentX, obstacleYPosition, laneData.z);
+
+                // --- NEW --- Rotate mesh if moving left ---
+                if (direction < 0) {
+                    obstacleMesh.rotation.y = Math.PI; // Rotate 180 degrees around Y axis
+                }
+                // --- End NEW Rotation ---
+
+                obstacleMesh.castShadow = true;
+                obstacleMesh.receiveShadow = false;
+                scene.add(obstacleMesh);
+
+                // Bounding box calculation remains the same (based on unrotated geometry size and position)
+                const obstacleBoundingBox = new THREE.Box3().setFromCenterAndSize( obstacleMesh.position, new THREE.Vector3(obstacleW, obstacleH, 0.5) );
+                const obstacleData = { mesh: obstacleMesh, boundingBox: obstacleBoundingBox, speed: speed, direction: direction, laneZ: laneData.z, type: obstacleType };
+                obstacles.push(obstacleData);
+                laneData.obstacles.push(obstacleData);
             }
         }
 
@@ -283,50 +327,14 @@
         // --- Collision Check (Obstacles - Unchanged) ---
         function checkCollisions() { if (!player || isMoving || currentGameState !== GAME_STATE.PLAYING) { return; } if (player.geometry.type === 'PlaneGeometry') { const character = CHARACTERS[selectedCharacterIndex]; playerBoundingBox.setFromCenterAndSize(player.position, new THREE.Vector3(character.width, character.height, 0.5)); } else { playerBoundingBox.setFromObject(player); } obstacles.forEach(obstacle => { if (Math.abs(player.position.z - obstacle.laneZ) < laneWidth / 2) { if (playerBoundingBox.intersectsBox(obstacle.boundingBox)) { console.log("Collision Detected with obstacle!"); triggerGameOver("collision"); } } }); }
 
-        // --- Cleanup Environment ---
-        // --- MODIFIED --- Corrected filter logic for ALL arrays AGAIN ---
+        // --- Cleanup Environment (Unchanged from previous fix) ---
         function cleanupEnvironment() {
-            // Calculate the Z position behind the player beyond which objects are removed
-            // Player Z is negative and decreasing. Threshold is player.z + positive_buffer.
-            // Threshold is closer to 0 than player.z.
-            // We want to REMOVE items with z > threshold (items behind the player relative to threshold)
-            // We want to KEEP items with z < threshold (items further away than threshold)
             const cleanupThresholdZ = (player ? player.position.z : 0) + (cleanupBuffer * laneWidth);
-
-            // Clean up lanes: Keep lanes where lane.z < threshold
-            lanes = lanes.filter(lane => {
-                if (lane.z < cleanupThresholdZ) return true; // Keep lane (further away)
-                else { // Remove lane (behind threshold)
-                    lane.obstacles.forEach(obstacle => { const index = obstacles.indexOf(obstacle); if (index > -1) obstacles.splice(index, 1); if (obstacle.mesh.parent) scene.remove(obstacle.mesh); });
-                    lane.safeSpots.forEach(spot => { const index = safeSpots.indexOf(spot); if (index > -1) safeSpots.splice(index, 1); if (spot.mesh.parent) scene.remove(spot.mesh); });
-                    if (lane.mesh.parent) scene.remove(lane.mesh);
-                    return false;
-                }
-            });
-            // Clean up obstacles (fallback): Keep obstacles where obstacle.laneZ < threshold
-            obstacles = obstacles.filter(obstacle => {
-                if (obstacle.laneZ < cleanupThresholdZ) return true;
-                else { if (obstacle.mesh.parent) scene.remove(obstacle.mesh); return false; }
-            });
-            // Clean up safe spots (fallback): Keep spots where spot.z < threshold
-            safeSpots = safeSpots.filter(spot => {
-                if (spot.z < cleanupThresholdZ) return true;
-                else { if (spot.mesh.parent) scene.remove(spot.mesh); return false; }
-            });
-            // Clean up scenery: Keep scenery where itemZ < threshold
-            scenery = scenery.filter(item => {
-                const itemZ = item.position ? item.position.z : (item.children.length > 0 ? item.children[0].position.z : cleanupThresholdZ - 1); // Default Z to keep if no position
-                if (itemZ < cleanupThresholdZ) return true;
-                else { if (item.parent) scene.remove(item); return false; }
-            });
-            // Clean up wall segments: Keep segments where segment.z < threshold
-            wallSegments = wallSegments.filter(segment => {
-                if (segment.z < cleanupThresholdZ) return true; // Keep segment
-                else {
-                    if (segment.mesh.parent) scene.remove(segment.mesh); // Remove mesh
-                    return false; // Remove from array
-                }
-            });
+            lanes = lanes.filter(lane => { if (lane.z < cleanupThresholdZ) return true; else { lane.obstacles.forEach(obstacle => { const index = obstacles.indexOf(obstacle); if (index > -1) obstacles.splice(index, 1); if (obstacle.mesh.parent) scene.remove(obstacle.mesh); }); lane.safeSpots.forEach(spot => { const index = safeSpots.indexOf(spot); if (index > -1) safeSpots.splice(index, 1); if (spot.mesh.parent) scene.remove(spot.mesh); }); if (lane.mesh.parent) scene.remove(lane.mesh); return false; } });
+            obstacles = obstacles.filter(obstacle => { if (obstacle.laneZ < cleanupThresholdZ) return true; else { if (obstacle.mesh.parent) scene.remove(obstacle.mesh); return false; } });
+            safeSpots = safeSpots.filter(spot => { if (spot.z < cleanupThresholdZ) return true; else { if (spot.mesh.parent) scene.remove(spot.mesh); return false; } });
+            scenery = scenery.filter(item => { const itemZ = item.position ? item.position.z : (item.children.length > 0 ? item.children[0].position.z : cleanupThresholdZ - 1); if (itemZ < cleanupThresholdZ) return true; else { if (item.parent) scene.remove(item); return false; } });
+            wallSegments = wallSegments.filter(segment => { if (segment.z < cleanupThresholdZ) return true; else { if (segment.mesh.parent) scene.remove(segment.mesh); return false; } });
         }
 
         // --- Controls (Unchanged from previous fix) ---
