@@ -206,15 +206,31 @@
             if (canSpawnWater && Math.random() < waterProbability && previousLaneType !== LANE_TYPES.WATER) { laneType = LANE_TYPES.WATER; } else { const probabilityOfWalkway = Math.max(0.55, Math.min(0.9, 0.55 + Math.abs(nextZ / (70 * (laneWidth/2) )))); laneType = Math.random() < probabilityOfWalkway ? LANE_TYPES.WALKWAY : LANE_TYPES.CARPET; }
             createLane(laneType, nextZ);
         }
-        // addSafeSpotsToLane (Unchanged)
+
+        // --- MODIFIED --- addSafeSpotsToLane now stores bounding box ---
         function addSafeSpotsToLane(laneData) {
             const numSpots = Math.floor(Math.random() * 3) + 2; const spotWidth = laneWidth * 0.8; const spotDepth = laneWidth * 0.8; const spotHeight = 0.2; const spotGeometry = new THREE.BoxGeometry(spotWidth, spotHeight, spotDepth); const spotMaterial = sceneryMaterials.safeSpot; const possiblePositions = []; const halfPlayerWidthApprox = (CHARACTERS[selectedCharacterIndex].width / 2) || 1.1;
             for (let x = -laneLength / 2 + spotWidth / 2; x <= laneLength / 2 - spotWidth / 2; x += laneWidth) { if (Math.abs(x) < laneLength / 2 - halfPlayerWidthApprox) { possiblePositions.push(x); } }
             possiblePositions.sort(() => 0.5 - Math.random()); const spotPositionsX = possiblePositions.slice(0, numSpots);
             if (laneData.z === 0 && !spotPositionsX.includes(0)) { if (spotPositionsX.length < possiblePositions.length && spotPositionsX.length > 0) { spotPositionsX.pop(); spotPositionsX.push(0); } else if (spotPositionsX.length === 0) { spotPositionsX.push(0); } }
-            spotPositionsX.forEach(posX => { const spotMesh = new THREE.Mesh(spotGeometry, spotMaterial); spotMesh.position.set(posX, spotHeight / 2, laneData.z); spotMesh.castShadow = true; spotMesh.receiveShadow = true; scene.add(spotMesh); const spotData = { mesh: spotMesh, x: posX, z: laneData.z }; laneData.safeSpots.push(spotData); safeSpots.push(spotData); });
+
+            spotPositionsX.forEach(posX => {
+                const spotMesh = new THREE.Mesh(spotGeometry, spotMaterial);
+                spotMesh.position.set(posX, spotHeight / 2, laneData.z);
+                spotMesh.castShadow = true; spotMesh.receiveShadow = true;
+                scene.add(spotMesh);
+
+                // --- NEW --- Create and store bounding box for the spot
+                const spotBox = new THREE.Box3().setFromObject(spotMesh);
+
+                // --- MODIFIED --- Store bounding box in spotData
+                const spotData = { mesh: spotMesh, x: posX, z: laneData.z, boundingBox: spotBox };
+                laneData.safeSpots.push(spotData);
+                safeSpots.push(spotData);
+            });
             console.log(`Added ${laneData.safeSpots.length} safe spots to water lane at z=${laneData.z}`);
         }
+
         // addSceneryToLane (Unchanged)
         function addSceneryToLane(laneData) { const sceneryType = Math.random() < 0.6 ? 'desk' : 'plant'; let sceneryMesh; const side = Math.random() < 0.5 ? -1 : 1; const xOffset = (laneLength / 3) + (Math.random() * laneLength / 4); const sceneryX = xOffset * side; const sceneryZ = laneData.z + (Math.random() - 0.5) * laneWidth * 0.8; if (sceneryType === 'desk') { const deskHeight = 1.2; const deskGeo = new THREE.BoxGeometry(2.5, deskHeight, 1.2); sceneryMesh = new THREE.Mesh(deskGeo, sceneryMaterials.desk); sceneryMesh.position.set(sceneryX, deskHeight / 2, sceneryZ); } else { const potHeight = 0.8; const potRadius = 0.5; const potGeo = new THREE.CylinderGeometry(potRadius * 0.8, potRadius, potHeight, 12); const potMesh = new THREE.Mesh(potGeo, sceneryMaterials.plantPot); potMesh.position.set(sceneryX, potHeight / 2, sceneryZ); const leafHeight = 1.0; const leafGeo = new THREE.ConeGeometry(potRadius * 1.2, leafHeight, 8); const leafMesh = new THREE.Mesh(leafGeo, sceneryMaterials.plantLeaf); leafMesh.position.set(sceneryX, potHeight + leafHeight / 2, sceneryZ); sceneryMesh = new THREE.Group(); sceneryMesh.add(potMesh); sceneryMesh.add(leafMesh); } sceneryMesh.castShadow = true; sceneryMesh.receiveShadow = true; scene.add(sceneryMesh); scenery.push(sceneryMesh); }
         // addObstaclesToLane (Unchanged)
@@ -249,74 +265,71 @@
             scenery = scenery.filter(item => { const itemZ = item.position ? item.position.z : (item.children.length > 0 ? item.children[0].position.z : cleanupThresholdZ -1); if (itemZ < cleanupThresholdZ) return true; else { if (item.parent) scene.remove(item); return false; } });
         }
 
-        // --- MODIFIED --- Controls (Increased tolerance & logging) ---
+        // --- MODIFIED --- Controls (Uses Bounding Box Check for Water) ---
         function onKeyDown(event) {
             if (currentGameState !== GAME_STATE.PLAYING || isMoving) return;
 
             let moved = false;
             const currentX = playerPosition.x;
             const currentZ = playerPosition.z;
-            const moveAmount = laneWidth; // Move one lane width at a time
+            const moveAmount = laneWidth;
             let targetX = currentX;
             let targetZ = currentZ;
             let isForwardMove = false;
 
-            // Determine target position based on key press
             switch (event.key) {
                 case 'ArrowUp': case 'w':
-                    targetZ = currentZ - moveAmount;
-                    targetX = currentX; moved = true; isForwardMove = true; break;
+                    targetZ = currentZ - moveAmount; targetX = currentX; moved = true; isForwardMove = true; break;
                 case 'ArrowLeft': case 'a':
-                    targetX = currentX - moveAmount;
-                    targetZ = currentZ; moved = true; break;
+                    targetX = currentX - moveAmount; targetZ = currentZ; moved = true; break;
                 case 'ArrowRight': case 'd':
-                    targetX = currentX + moveAmount;
-                    targetZ = currentZ; moved = true; break;
+                    targetX = currentX + moveAmount; targetZ = currentZ; moved = true; break;
                 case 'ArrowDown': case 's':
-                    targetZ = currentZ + moveAmount;
-                    targetX = currentX; moved = true; break;
+                    targetZ = currentZ + moveAmount; targetX = currentX; moved = true; break;
             }
 
-            // Perform checks only if a move key was pressed
             if (moved) {
                 let allowMove = true;
 
                 // 1. Check Wall Boundaries
-                const playerWidth = player ? (player.geometry.parameters.width || CHARACTERS[selectedCharacterIndex].width) : 2.0;
-                const wallBoundary = laneLength / 2 - playerWidth / 2;
+                const playerChar = CHARACTERS[selectedCharacterIndex];
+                const playerW = playerChar.width;
+                const playerH = playerChar.height;
+                const wallBoundary = laneLength / 2 - playerW / 2;
                 if (targetX > wallBoundary || targetX < -wallBoundary) {
                     console.log("Blocked by wall");
                     allowMove = false;
                 }
 
-                // 2. Check Water Lane Safety (Only if moving forward/backward and move is allowed so far)
+                // 2. Check Water Lane Safety (Using Bounding Boxes)
                 if (allowMove && targetZ !== currentZ) {
-                    const targetLane = lanes.find(lane => Math.abs(lane.z - targetZ) < 0.1); // Find the lane player is moving onto
+                    const targetLane = lanes.find(lane => Math.abs(lane.z - targetZ) < 0.1);
 
                     if (targetLane && targetLane.type === LANE_TYPES.WATER) {
-                        console.log(`Moving to Water Lane at Z: ${targetLane.z}. Target X: ${targetX}`); // --- DEBUG LOG ---
+                        console.log(`Moving to Water Lane at Z: ${targetLane.z}. Target X: ${targetX}`);
 
-                        // --- MODIFIED --- Increased tolerance for safe spot check
-                        const tolerance = 0.5; // Was 0.1
-                        let isSafe = false; // Assume not safe initially
+                        // --- NEW --- Calculate player's potential bounding box at target
+                        const targetCenter = new THREE.Vector3(targetX, playerH / 2, targetZ);
+                        // Use consistent size, giving depth even if player is plane
+                        const targetSize = new THREE.Vector3(playerW, playerH, 0.5);
+                        // Create a temporary bounding box for the check
+                        const targetPlayerBox = new THREE.Box3().setFromCenterAndSize(targetCenter, targetSize);
 
-                        // Iterate through spots and check with tolerance
+                        // --- MODIFIED --- Check intersection with safe spot bounding boxes
+                        let isSafe = false; // Assume not safe
                         targetLane.safeSpots.forEach(spot => {
-                            const diffX = Math.abs(spot.x - targetX);
-                            console.log(` - Checking spot at X: ${spot.x}. Difference: ${diffX.toFixed(3)}`); // --- DEBUG LOG ---
-                            if (diffX < tolerance) {
+                            if (spot.boundingBox && targetPlayerBox.intersectsBox(spot.boundingBox)) {
+                                console.log("Intersection found with safe spot!"); // --- DEBUG LOG ---
                                 isSafe = true;
                             }
                         });
 
-
                         if (!isSafe) {
-                            console.log("Landed in water! (No safe spot found within tolerance)"); // --- DEBUG LOG ---
-                            triggerGameOver("drowned"); // Game over for landing in water
-                            allowMove = false; // Prevent the move animation
+                            console.log("Landed in water! (No BBox intersection with safe spots)"); // --- DEBUG LOG ---
+                            triggerGameOver("drowned");
+                            allowMove = false;
                         } else {
-                             console.log("Landed on safe spot!"); // --- DEBUG LOG ---
-                             // Score is handled after successful move confirmation
+                             console.log("Landed on safe spot! (BBox intersection confirmed)"); // --- DEBUG LOG ---
                         }
                     }
                 }
@@ -327,15 +340,13 @@
                     targetPlayerPosition.z = targetZ;
                     isMoving = true;
                     moveStartTime = clock.elapsedTime * 1000;
-                    lastMoveTime = clock.elapsedTime; // Reset idle timer
+                    lastMoveTime = clock.elapsedTime;
 
-                    // Increment score ONLY on successful forward move
                     if (isForwardMove) {
                         score++;
                         infoElement.innerText = `Score: ${score}`;
                     }
                 } else {
-                    // If move was disallowed, reset target position visually to prevent snapping
                     targetPlayerPosition.x = currentX;
                     targetPlayerPosition.z = currentZ;
                 }
