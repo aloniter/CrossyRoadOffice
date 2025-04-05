@@ -81,13 +81,13 @@
 
         // --- Obstacle Definitions ---
         const OBSTACLE_TYPES = { CC: 'cc', LIVE_CHANGE: 'live_change', ON_CALL: 'on_call' };
-        // --- *** MODIFIED *** --- Swapped left/right image assignments ---
+        // --- *** CORRECTED *** --- Assign images based on user request ---
         const OBSTACLE_IMAGES = {
-            // right: image for obstacles moving right-to-left (direction < 0)
-            // left: image for obstacles moving left-to-right (direction > 0)
-            [OBSTACLE_TYPES.CC]: { right: 'CC R.png', left: 'CC.png' },
-            [OBSTACLE_TYPES.LIVE_CHANGE]: { right: 'Live Change R.png', left: 'Live Change.png' },
-            [OBSTACLE_TYPES.ON_CALL]: { right: 'On Call R.png', left: 'On Call.png' }
+            // right: image for obstacles moving left-to-right (direction > 0) -> USE REGULAR
+            // left: image for obstacles moving right-to-left (direction < 0) -> USE 'R' VERSION
+            [OBSTACLE_TYPES.CC]: { right: 'CC.png', left: 'CC R.png' },
+            [OBSTACLE_TYPES.LIVE_CHANGE]: { right: 'Live Change.png', left: 'Live Change R.png' },
+            [OBSTACLE_TYPES.ON_CALL]: { right: 'On Call.png', left: 'On Call R.png' }
         };
         let obstacleTextures = {}; // Will store { cc: { right: Texture, left: Texture }, ... }
         const OBSTACLE_PLANE_WIDTH = 5.0;
@@ -136,13 +136,13 @@
                     texture.needsUpdate = true;
                 };
 
-                // Load Right-moving texture (now e.g., CC R.png)
+                // Load Right-moving texture (now e.g., CC.png)
                 if (images.right) {
                     obstacleTextures[typeKey].right = textureLoader.load(images.right, loadCallback, undefined, (err) => console.error(`Failed texture: ${typeKey} Right (${images.right})`, err));
                 } else {
                     console.warn(`Missing right image for obstacle type: ${typeKey}`);
                 }
-                // Load Left-moving texture (now e.g., CC.png)
+                // Load Left-moving texture (now e.g., CC R.png)
                 if (images.left) {
                     obstacleTextures[typeKey].left = textureLoader.load(images.left, loadCallback, undefined, (err) => console.error(`Failed texture: ${typeKey} Left (${images.left})`, err));
                 } else {
@@ -269,8 +269,8 @@
         // addSceneryToLane (Unchanged)
         function addSceneryToLane(laneData) { const sceneryType = Math.random() < 0.6 ? 'desk' : 'plant'; let sceneryMesh; const side = Math.random() < 0.5 ? -1 : 1; const xOffset = (laneLength / 3) + (Math.random() * laneLength / 4); const sceneryX = xOffset * side; const sceneryZ = laneData.z + (Math.random() - 0.5) * laneWidth * 0.8; if (sceneryType === 'desk') { const deskHeight = 1.2; const deskGeo = new THREE.BoxGeometry(2.5, deskHeight, 1.2); sceneryMesh = new THREE.Mesh(deskGeo, sceneryMaterials.desk); sceneryMesh.position.set(sceneryX, deskHeight / 2, sceneryZ); } else { const potHeight = 0.8; const potRadius = 0.5; const potGeo = new THREE.CylinderGeometry(potRadius * 0.8, potRadius, potHeight, 12); const potMesh = new THREE.Mesh(potGeo, sceneryMaterials.plantPot); potMesh.position.set(sceneryX, potHeight / 2, sceneryZ); const leafHeight = 1.0; const leafGeo = new THREE.ConeGeometry(potRadius * 1.2, leafHeight, 8); const leafMesh = new THREE.Mesh(leafGeo, sceneryMaterials.plantLeaf); leafMesh.position.set(sceneryX, potHeight + leafHeight / 2, sceneryZ); sceneryMesh = new THREE.Group(); sceneryMesh.add(potMesh); sceneryMesh.add(leafMesh); } sceneryMesh.castShadow = true; sceneryMesh.receiveShadow = true; scene.add(sceneryMesh); scenery.push(sceneryMesh); }
 
-        // --- MODIFIED --- addObstaclesToLane uses correct texture based on direction ---
-        // (Logic unchanged, but uses the swapped OBSTACLE_IMAGES definition)
+        // --- addObstaclesToLane ---
+        // (Uses correct texture based on direction via OBSTACLE_IMAGES - Unchanged)
         function addObstaclesToLane(laneData) {
             const maxObstacles = Math.min(3, 1 + Math.floor(score / 15));
             const numObstacles = Math.floor(Math.random() * maxObstacles) + 1;
@@ -283,47 +283,40 @@
             const totalSpacingNeeded = (numObstacles -1) * minSpacing;
             const randomSpacingPool = Math.max(0, laneLength - totalSpacingNeeded - OBSTACLE_PLANE_WIDTH * numObstacles);
             let currentX = startEdge;
-            const availableObstacleTypes = Object.keys(OBSTACLE_TYPES); // ["cc", "live_change", "on_call"]
+            const availableObstacleTypes = Object.keys(OBSTACLE_TYPES);
 
             for (let i = 0; i < numObstacles; i++) {
                 const randomTypeKey = availableObstacleTypes[Math.floor(Math.random() * availableObstacleTypes.length)];
-                const obstacleType = OBSTACLE_TYPES[randomTypeKey]; // e.g., "cc"
+                const obstacleType = OBSTACLE_TYPES[randomTypeKey];
 
-                // Select texture based on direction using the swapped OBSTACLE_IMAGES
-                const textureSet = obstacleTextures[obstacleType]; // Get { left: Texture, right: Texture }
+                // Select texture based on direction using the corrected OBSTACLE_IMAGES
+                const textureSet = obstacleTextures[obstacleType];
                 let textureToUse = null;
                 if (textureSet) {
-                    // direction < 0 (moving left) uses textureSet.left (which is now CC.png etc.)
-                    // direction > 0 (moving right) uses textureSet.right (which is now CC R.png etc.)
                     textureToUse = direction < 0 ? textureSet.left : textureSet.right;
-                    if (!textureToUse) { // Fallback if one direction is missing
-                        textureToUse = textureSet.right || textureSet.left;
-                    }
+                    if (!textureToUse) { textureToUse = textureSet.right || textureSet.left; }
                 }
 
                 const obstacleW = OBSTACLE_PLANE_WIDTH;
                 const obstacleH = OBSTACLE_PLANE_HEIGHT;
                 const obstacleYPosition = obstacleH / 2;
                 const obstacleGeometry = new THREE.PlaneGeometry(obstacleW, obstacleH);
-                // Use the selected texture
                 const obstacleMaterial = new THREE.MeshBasicMaterial({
-                    map: textureToUse || null, // Use textureToUse
-                    color: textureToUse ? 0xffffff : DEFAULT_OBSTACLE_COLOR, // Use fallback color if no texture
+                    map: textureToUse || null,
+                    color: textureToUse ? 0xffffff : DEFAULT_OBSTACLE_COLOR,
                     transparent: true,
                     side: THREE.DoubleSide
                 });
                 const obstacleMesh = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
 
-                // Position calculation
                 if (i > 0) { const spacingToAdd = minSpacing + (numObstacles > 1 ? Math.random() * (randomSpacingPool / (numObstacles - 1)) : 0); currentX -= spacingToAdd * direction; } else { currentX -= (Math.random() * (randomSpacingPool / numObstacles)) * direction; }
                 obstacleMesh.position.set(currentX, obstacleYPosition, laneData.z);
 
-                // No mesh rotation needed
+                // No mesh rotation
                 obstacleMesh.castShadow = true;
                 obstacleMesh.receiveShadow = false;
                 scene.add(obstacleMesh);
 
-                // Bounding box calculation remains the same
                 const obstacleBoundingBox = new THREE.Box3().setFromCenterAndSize( obstacleMesh.position, new THREE.Vector3(obstacleW, obstacleH, 0.5) );
                 const obstacleData = { mesh: obstacleMesh, boundingBox: obstacleBoundingBox, speed: speed, direction: direction, laneZ: laneData.z, type: obstacleType };
                 obstacles.push(obstacleData);
