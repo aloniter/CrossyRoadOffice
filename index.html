@@ -364,7 +364,7 @@
         // --- Game Over (Unchanged) ---
         function triggerGameOver(reason = "collision") {
             if (currentGameState !== GAME_STATE.PLAYING) return; currentGameState = GAME_STATE.GAME_OVER; console.log(`Game Over! Score: ${score}, Reason: ${reason}`); finalScoreElement.innerText = score;
-            if (reason === "idle") { gameOverReasonElement.innerText = "Took too long!"; } else if (reason === "drowned") { gameOverReasonElement.innerText = "Fell in the water cooler!"; } else { gameOverReasonElement.innerText = "Deadline Missed!"; }
+            if (reason === "idle") { gameOverReasonElement.innerText = "Took too long!"; } else if (reason === "drowned") { gameOverReasonElement.innerText = "Fell in the water cooler!"; } else { gameOverReasonElement.innerText = "You lost, go back to work!"; }
             showOverlay(gameOverElement);
             const highScores = getHighScores(); const scoreNeeded = highScores.length < MAX_HIGH_SCORES ? 0 : highScores[MAX_HIGH_SCORES - 1].score; if (score > 0 && score >= scoreNeeded) { const characterName = CHARACTERS[selectedCharacterIndex].name; console.log(`New Top 3 Score with character: ${characterName}`); highScores.push({ name: characterName, score: score }); saveHighScores(highScores); console.log("New high score saved!"); }
         }
