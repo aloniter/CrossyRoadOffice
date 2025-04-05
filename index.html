@@ -64,11 +64,16 @@
         const WALL_THICKNESS = 1.0;
 
         // --- Character Definition ---
-        // --- MODIFIED --- Added 'Mor' character
+        // --- MODIFIED --- Added Lin, Asaf, Tal, Ron, Hadar
         const CHARACTERS = [
              { name: 'Alon', imageUrl: 'Alon.png', width: 2.8, height: 3.36 },
              { name: 'Sahar', imageUrl: 'Sahar.png', width: 2.8, height: 3.36 },
-             { name: 'Mor', imageUrl: 'Mor.png', width: 2.8, height: 3.36 }, // Added Mor
+             { name: 'Mor', imageUrl: 'Mor.png', width: 2.8, height: 3.36 },
+             { name: 'Lin', imageUrl: 'Lin.png', width: 2.8, height: 3.36 },   // Added Lin
+             { name: 'Asaf', imageUrl: 'Asaf.png', width: 2.8, height: 3.36 },  // Added Asaf
+             { name: 'Tal', imageUrl: 'Tal.png', width: 2.8, height: 3.36 },    // Added Tal
+             { name: 'Ron', imageUrl: 'Ron.png', width: 2.8, height: 3.36 },    // Added Ron
+             { name: 'Hadar', imageUrl: 'Hadar.png', width: 2.8, height: 3.36 }, // Added Hadar
              { name: 'Default', imageUrl: null, width: 2.2, height: 2.2 }
         ];
         let selectedCharacterIndex = 0; // Default to Alon
@@ -113,7 +118,7 @@
         // --- Character Selection (Unchanged) ---
         function selectCharacter(index) { if (index >= 0 && index < CHARACTERS.length) { selectedCharacterIndex = index; updateCharacterButtonSelection(); console.log(`Selected character: ${CHARACTERS[selectedCharacterIndex].name}`); } }
         function updateCharacterButtonSelection() { const buttons = characterButtonsElement.querySelectorAll('.char-button'); buttons.forEach((button, index) => { if (index === selectedCharacterIndex) button.classList.add('selected'); else button.classList.remove('selected'); }); }
-        // --- Populates buttons based on CHARACTERS array (will include Mor automatically) ---
+        // --- Populates buttons based on CHARACTERS array (will include new characters automatically) ---
         function populateCharacterButtons() {
              characterButtonsElement.innerHTML = '';
              CHARACTERS.forEach((char, index) => {
@@ -123,15 +128,15 @@
                  button.onclick = () => selectCharacter(index);
                  characterButtonsElement.appendChild(button);
              });
-             updateCharacterButtonSelection(); // Highlight the default selected character
+             updateCharacterButtonSelection();
         }
 
         // --- Preload Assets & Materials ---
-        // --- Loads textures based on CHARACTERS array (will include Mor automatically) ---
+        // --- Loads textures based on CHARACTERS array (will include new characters automatically) ---
         function preloadAssets() {
             console.log("Preloading assets...");
             let maxAnisotropy = renderer ? renderer.capabilities.getMaxAnisotropy() : 1;
-            // Load Character Textures (including Mor)
+            // Load Character Textures (including new ones)
             CHARACTERS.forEach((char, index) => {
                 if (char.imageUrl) {
                     characterTextures[index] = textureLoader.load(char.imageUrl, (texture) => {
@@ -192,7 +197,7 @@
             scene.add(directionalLight);
             scene.add(directionalLight.target);
             preloadAssets();
-            if (characterButtonsElement) populateCharacterButtons(); else console.error("characterButtonsElement not found!"); // This will now create the Mor button
+            if (characterButtonsElement) populateCharacterButtons(); else console.error("characterButtonsElement not found!"); // This will now create the new character buttons
             if (startGameButton) startGameButton.onclick = startGame; else console.error("startGameButton not found!");
             if (viewScoresButton) viewScoresButton.onclick = () => { displayHighScoresOnScreen(); currentGameState = GAME_STATE.SHOW_SCORES; showOverlay(scoreboardScreenElement); }; else console.error("viewScoresButton not found!");
             if (backToMenuButton) backToMenuButton.onclick = goToMenu; else console.error("backToMenuButton not found!");
@@ -219,7 +224,7 @@
         }
 
         // --- Create Player (Unchanged) ---
-        // --- Will use selectedCharacterIndex which can now be Mor ---
+        // --- Will use selectedCharacterIndex which can now be any of the new characters ---
         function createPlayer() {
             const character = CHARACTERS[selectedCharacterIndex]; const playerW = character.width; const playerH = character.height; const playerBaseY = playerH / 2; let playerMaterial, playerGeometry;
             if (character.imageUrl && characterTextures[selectedCharacterIndex]) { playerGeometry = new THREE.PlaneGeometry(playerW, playerH); playerMaterial = new THREE.MeshBasicMaterial({ map: characterTextures[selectedCharacterIndex], transparent: true, side: THREE.DoubleSide }); } else { playerGeometry = new THREE.BoxGeometry(playerW, playerH, playerW * 0.8); playerMaterial = new THREE.MeshStandardMaterial({ color: DEFAULT_PLAYER_COLOR, roughness: 0.6 }); }
