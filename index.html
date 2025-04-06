@@ -352,34 +352,13 @@
          * @param {number} playerScore - The score achieved by the player.
          */
         function submitScoreToFirebase(playerName, playerScore) {
-            // Check if database connection exists
-            if (!database) {
-                console.error("Database not initialized. Cannot submit score.");
-                return;
-            }
-            // Don't submit scores of 0 or less
-            if (playerScore <= 0) {
-                console.log("Score is 0 or less, not submitting.");
-                return;
-            }
-
-            const scoresRef = database.ref('scores'); // Reference to the 'scores' node
-            const newScoreRef = scoresRef.push(); // Generate a unique key for the new score
-
-            // Set the score data with name, score, and server timestamp
-            newScoreRef.set({
-                name: playerName,
-                score: playerScore,
-                timestamp: firebase.database.ServerValue.TIMESTAMP // Use server time for consistency
-            })
-            .then(() => {
-                console.log(`Score for ${playerName} (${playerScore}) submitted successfully.`);
-            })
-            .catch((error) => {
-                console.error("Error submitting score to Firebase:", error);
-                // Optionally alert the user about the submission error
-                // alert("There was an error submitting your score. Please try again later.");
-            });
+            if (!database) { console.error("Database not initialized. Cannot submit score."); return; }
+            if (playerScore <= 0) { console.log("Score is 0 or less, not submitting."); return; }
+            const scoresRef = database.ref('scores');
+            const newScoreRef = scoresRef.push();
+            newScoreRef.set({ name: playerName, score: playerScore, timestamp: firebase.database.ServerValue.TIMESTAMP })
+            .then(() => { console.log(`Score for ${playerName} (${playerScore}) submitted successfully.`); })
+            .catch((error) => { console.error("Error submitting score to Firebase:", error); });
         }
 
         /**
@@ -387,1281 +366,235 @@
          * and updates the scoreboard UI accordingly.
          */
         function listenForHighScores() {
-            // Check if database connection exists
-            if (!database) {
-                console.error("Database not initialized. Cannot listen for scores.");
-                noScoresMessageElement.textContent = "Leaderboard unavailable.";
-                noScoresMessageElement.style.display = 'block';
-                scoreListElement.innerHTML = ''; // Clear any previous scores
-                return;
-            }
-
+            if (!database) { console.error("Database not initialized. Cannot listen for scores."); noScoresMessageElement.textContent = "Leaderboard unavailable."; noScoresMessageElement.style.display = 'block'; scoreListElement.innerHTML = ''; return; }
             const scoresRef = database.ref('scores');
-            // Create a query to get the top 3 scores (ordered by score, limited to last 3)
             const topScoresQuery = scoresRef.orderByChild('score').limitToLast(3);
-
-            // Detach any previous listener on this query to prevent duplicates
-            topScoresQuery.off('value');
-
-            // Attach the listener for 'value' events (data changes)
+            topScoresQuery.off('value'); // Detach previous listener
             topScoresQuery.on('value', (snapshot) => {
-                scoreListElement.innerHTML = ''; // Clear current scoreboard display
-                const scores = []; // Array to hold processed scores
-
+                scoreListElement.innerHTML = '';
+                const scores = [];
                 if (snapshot.exists()) {
-                    // If data exists, iterate through the results
-                    snapshot.forEach((childSnapshot) => {
-                        // Push score data into the array
-                        scores.push({
-                            key: childSnapshot.key, // Unique key from Firebase
-                            name: childSnapshot.val().name,
-                            score: childSnapshot.val().score
-                        });
-                    });
-
-                    // Sort descending (Firebase limitToLast should handle this, but client-side sort ensures order)
-                    scores.sort((a, b) => b.score - a.score);
-
-                    noScoresMessageElement.style.display = 'none'; // Hide the 'no scores' message
-                    // Populate the scoreboard list
+                    snapshot.forEach((childSnapshot) => { scores.push({ key: childSnapshot.key, name: childSnapshot.val().name, score: childSnapshot.val().score }); });
+                    scores.sort((a, b) => b.score - a.score); // Sort client-side
+                    noScoresMessageElement.style.display = 'none';
                     scores.forEach((scoreEntry) => {
                         const li = document.createElement('li');
-                        // Truncate long names for display
                         const displayName = scoreEntry.name.length > 15 ? scoreEntry.name.substring(0, 12) + '...' : scoreEntry.name;
-                        // Use escapeHtml to prevent potential XSS from names
                         li.innerHTML = `<span class="name">${escapeHtml(displayName)}</span><span class="score">${scoreEntry.score}</span>`;
                         scoreListElement.appendChild(li);
                     });
                 } else {
-                    // No scores found in the database
                     noScoresMessageElement.textContent = "No scores yet! Be the first!";
-                    noScoresMessageElement.style.display = 'block'; // Show the 'no scores' message
+                    noScoresMessageElement.style.display = 'block';
                 }
             }, (error) => {
-                // Handle errors during data fetching
                 console.error("Error fetching high scores:", error);
                 noScoresMessageElement.textContent = "Error loading scores.";
                 noScoresMessageElement.style.display = 'block';
-                scoreListElement.innerHTML = ''; // Clear display on error
+                scoreListElement.innerHTML = '';
             });
         }
 
-        /**
-         * Utility function to escape HTML special characters in a string.
-         * Helps prevent Cross-Site Scripting (XSS) vulnerabilities.
-         * @param {string} unsafe - The potentially unsafe string.
-         * @returns {string} The escaped string.
-         */
-        function escapeHtml(unsafe) {
-            if (!unsafe) return ''; // Return empty string if input is null or undefined
-            return unsafe
-                 .replace(/&/g, "&amp;")
-                 .replace(/</g, "&lt;")
-                 .replace(/>/g, "&gt;")
-                 .replace(/"/g, "&quot;")
-                 .replace(/'/g, "&#039;");
-        }
+        /** Utility function to escape HTML special characters */
+        function escapeHtml(unsafe) { if (!unsafe) return ''; return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;"); }
 
         // --- UI State Management ---
-        /**
-         * Hides all overlays and shows the specified one.
-         * @param {HTMLElement | null} overlayElement - The overlay element to show, or null to hide all.
-         */
-        function showOverlay(overlayElement) {
-            // Hide all overlays first
-            mainMenuElement.classList.add('hidden');
-            scoreboardScreenElement.classList.add('hidden');
-            gameOverElement.classList.add('hidden');
-            infoElement.classList.add('hidden'); // Hide in-game score display during overlays
-            // Show the target overlay if provided
-            if (overlayElement) {
-                overlayElement.classList.remove('hidden');
-            }
-        }
+        function showOverlay(overlayElement) { mainMenuElement.classList.add('hidden'); scoreboardScreenElement.classList.add('hidden'); gameOverElement.classList.add('hidden'); infoElement.classList.add('hidden'); if (overlayElement) { overlayElement.classList.remove('hidden'); } }
 
         // --- Character Selection Logic ---
-        /**
-         * Sets the selected character index and updates the UI.
-         * @param {number} index - The index of the character in the CHARACTERS array.
-         */
-        function selectCharacter(index) {
-            if (index >= 0 && index < CHARACTERS.length) {
-                selectedCharacterIndex = index;
-                updateCharacterButtonSelection(); // Update button styles
-                console.log(`Selected character: ${CHARACTERS[selectedCharacterIndex].name}`);
-            }
-        }
-        /**
-         * Updates the visual styling of character selection buttons.
-         */
-        function updateCharacterButtonSelection() {
-            const buttons = characterButtonsElement.querySelectorAll('.char-button');
-            buttons.forEach((button, index) => {
-                // Add 'selected' class to the chosen button, remove from others
-                if (index === selectedCharacterIndex) button.classList.add('selected');
-                else button.classList.remove('selected');
-            });
-        }
-        /**
-         * Creates and adds character selection buttons to the main menu.
-         */
-        function populateCharacterButtons() {
-             characterButtonsElement.innerHTML = ''; // Clear existing buttons
-             CHARACTERS.forEach((char, index) => {
-                 const button = document.createElement('button');
-                 button.textContent = char.name;
-                 button.classList.add('char-button');
-                 button.onclick = () => selectCharacter(index); // Set click handler
-                 characterButtonsElement.appendChild(button);
-             });
-             updateCharacterButtonSelection(); // Highlight the default selected character
-        }
+        function selectCharacter(index) { if (index >= 0 && index < CHARACTERS.length) { selectedCharacterIndex = index; updateCharacterButtonSelection(); console.log(`Selected character: ${CHARACTERS[selectedCharacterIndex].name}`); } }
+        function updateCharacterButtonSelection() { const buttons = characterButtonsElement.querySelectorAll('.char-button'); buttons.forEach((button, index) => { if (index === selectedCharacterIndex) button.classList.add('selected'); else button.classList.remove('selected'); }); }
+        function populateCharacterButtons() { characterButtonsElement.innerHTML = ''; CHARACTERS.forEach((char, index) => { const button = document.createElement('button'); button.textContent = char.name; button.classList.add('char-button'); button.onclick = () => selectCharacter(index); characterButtonsElement.appendChild(button); }); updateCharacterButtonSelection(); }
 
-        // --- Preload Assets & Materials ---
-        /**
-         * Loads textures and defines materials needed for the game.
-         */
+        // --- Preload Assets & Materials (MODIFIED: Force Basic Materials for Lanes/Walls) ---
         function preloadAssets() {
             console.log("Preloading assets...");
             let maxAnisotropy = renderer ? renderer.capabilities.getMaxAnisotropy() : 1;
+            const onTextureLoad = (texture) => { texture.magFilter = THREE.NearestFilter; texture.anisotropy = maxAnisotropy; texture.needsUpdate = true; };
+            const onTextureError = (url) => (err) => { console.error(`Failed to load texture: ${url}`, err); };
 
-            // Reusable texture load callbacks
-            const onTextureLoad = (texture) => {
-                 texture.magFilter = THREE.NearestFilter; // Use nearest filter for pixelated look
-                 texture.anisotropy = maxAnisotropy; // Improve texture quality at angles
-                 texture.needsUpdate = true;
-            };
-            const onTextureError = (url) => (err) => {
-                 console.error(`Failed to load texture: ${url}`, err);
-                 // Consider setting a fallback texture or visual indicator here
-            };
-
-            // Load Character Textures asynchronously
+            // Load Character Textures (still use MeshStandardMaterial)
             console.log("Loading character textures...");
-            CHARACTERS.forEach((char, index) => {
-                if (char.imageUrl) {
-                    characterTextures[index] = textureLoader.load(
-                        char.imageUrl, // URL of the texture
-                        onTextureLoad, // Success callback
-                        undefined, // Progress callback (optional)
-                        onTextureError(char.imageUrl) // Error callback
-                    );
-                }
-             });
+            CHARACTERS.forEach((char, index) => { if (char.imageUrl) { characterTextures[index] = textureLoader.load( char.imageUrl, onTextureLoad, undefined, onTextureError(char.imageUrl) ); } });
 
-            // Load Obstacle Textures asynchronously
+            // Load Obstacle Textures (still use MeshStandardMaterial)
             console.log("Loading obstacle textures...");
             obstacleTextures = {};
-            for (const typeKey in OBSTACLE_IMAGES) {
-                const images = OBSTACLE_IMAGES[typeKey];
-                obstacleTextures[typeKey] = {};
-                if (images.right) {
-                    obstacleTextures[typeKey].right = textureLoader.load( images.right, onTextureLoad, undefined, onTextureError(images.right) );
-                } else { console.warn(`Missing right image for obstacle type: ${typeKey}`); }
-                if (images.left) {
-                    obstacleTextures[typeKey].left = textureLoader.load( images.left, onTextureLoad, undefined, onTextureError(images.left) );
-                } else {
-                    console.warn(`Missing left image for obstacle type: ${typeKey}`);
-                    // Fallback: Use right image if left is missing and right exists
-                    if (obstacleTextures[typeKey].right) {
-                         obstacleTextures[typeKey].left = obstacleTextures[typeKey].right;
-                    }
-                }
-            }
+            for (const typeKey in OBSTACLE_IMAGES) { const images = OBSTACLE_IMAGES[typeKey]; obstacleTextures[typeKey] = {}; if (images.right) { obstacleTextures[typeKey].right = textureLoader.load( images.right, onTextureLoad, undefined, onTextureError(images.right) ); } else { console.warn(`Missing right image for obstacle type: ${typeKey}`); } if (images.left) { obstacleTextures[typeKey].left = textureLoader.load( images.left, onTextureLoad, undefined, onTextureError(images.left) ); } else { console.warn(`Missing left image for obstacle type: ${typeKey}`); if (obstacleTextures[typeKey].right) { obstacleTextures[typeKey].left = obstacleTextures[typeKey].right; } } }
 
-            // Define Materials using generated textures (synchronous)
-            console.log("Defining materials...");
+            console.log("Defining materials (Forcing Basic for Lanes/Walls)..."); // Log change
             try {
-                // --- RESTORED: Use MeshStandardMaterial with generated textures ---
-                const carpetTexture = createNoiseTexture(64, 64, '#90EE90', '#3CB371');
-                if (carpetTexture) {
-                    carpetTexture.repeat.set(8, 8); // Set texture repeat
-                    laneMaterials[LANE_TYPES.CARPET] = new THREE.MeshStandardMaterial({ map: carpetTexture, roughness: 0.9, metalness: 0.05 });
-                } else {
-                    console.error("Failed to create carpet texture, CARPET material not set.");
-                     laneMaterials[LANE_TYPES.CARPET] = new THREE.MeshStandardMaterial({ color: 0x00ff00, roughness: 0.9, metalness: 0.05 }); // Fallback color
-                }
+                // --- MODIFIED: Force MeshBasicMaterial for lanes & walls ---
+                laneMaterials[LANE_TYPES.CARPET] = new THREE.MeshBasicMaterial({ color: 0x00cc00 }); // Bright Green
+                laneMaterials[LANE_TYPES.WALKWAY] = new THREE.MeshBasicMaterial({ color: 0xff8c00 }); // Dark Orange
+                laneMaterials[LANE_TYPES.WATER] = new THREE.MeshBasicMaterial({ color: 0x1E90FF, transparent: true, opacity: 0.85 }); // Blue (Basic)
+                wallMaterial = new THREE.MeshBasicMaterial({ color: 0x888888 }); // Grey
+                // --- END MODIFICATION ---
 
-                const walkwayTexture = createTileTexture(64, 64, '#E07A5F', '#D45D3D', 24);
-                if (walkwayTexture) {
-                    walkwayTexture.repeat.set(8, 8); // Set texture repeat
-                    laneMaterials[LANE_TYPES.WALKWAY] = new THREE.MeshStandardMaterial({ map: walkwayTexture, roughness: 0.4, metalness: 0.1 });
-                } else {
-                     console.error("Failed to create walkway texture, WALKWAY material not set.");
-                     laneMaterials[LANE_TYPES.WALKWAY] = new THREE.MeshStandardMaterial({ color: 0xffa500, roughness: 0.4, metalness: 0.1 }); // Fallback color
-                }
-                // --- END RESTORED ---
-
-                // Define other materials
-                laneMaterials[LANE_TYPES.WATER] = new THREE.MeshStandardMaterial({ color: WATER_COLOR, roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.85 });
-                wallMaterial = new THREE.MeshStandardMaterial({ color: 0xFFEBCD, roughness: 0.9, metalness: 0.0 }); // BlanchedAlmond color
+                // Scenery materials remain MeshStandardMaterial (as they seem to render ok)
                 sceneryMaterials.desk = new THREE.MeshStandardMaterial({ color: SCENERY_COLORS.DESK, roughness: 0.8, metalness: 0.1 });
                 sceneryMaterials.plantPot = new THREE.MeshStandardMaterial({ color: SCENERY_COLORS.PLANT_POT, roughness: 0.7, metalness: 0.1 });
                 sceneryMaterials.plantLeaf = new THREE.MeshStandardMaterial({ color: SCENERY_COLORS.PLANT_LEAF, roughness: 0.8, metalness: 0.0 });
                 sceneryMaterials.safeSpot = new THREE.MeshStandardMaterial({ color: SAFE_SPOT_COLOR, roughness: 0.9, metalness: 0.0 });
 
-                // Check if essential materials were created successfully
-                if (laneMaterials[LANE_TYPES.CARPET] && laneMaterials[LANE_TYPES.WALKWAY] && wallMaterial) {
-                     console.log("Essential materials defined successfully.");
-                } else {
-                     console.error("One or more essential materials failed to define!");
-                }
+                console.log("Materials defined (Lanes/Walls are Basic).");
 
             } catch (error) {
-                // Catch errors during material definition process
                 console.error("Error defining materials:", error);
             }
             console.log("Asset preloading & material definition finished.");
         }
 
         // --- Game Initialization ---
-        /**
-         * Sets up the entire game scene, renderer, lighting, UI, and event listeners.
-         */
         function init() {
             console.log("Initializing game...");
-            // Get references to all necessary DOM elements
-            infoElement = document.getElementById('info');
-            mainMenuElement = document.getElementById('mainMenu');
-            scoreboardScreenElement = document.getElementById('scoreboardScreen');
-            gameOverElement = document.getElementById('gameOver');
-            characterButtonsElement = document.getElementById('characterButtons');
-            startGameButton = document.getElementById('startGameButton');
-            viewScoresButton = document.getElementById('viewScoresButton');
-            backToMenuButton = document.getElementById('backToMenuButton');
-            scoreListElement = document.getElementById('scoreList');
-            noScoresMessageElement = document.getElementById('noScoresMessage');
-            finalScoreElement = document.getElementById('finalScore');
-            gameOverReasonElement = document.getElementById('gameOverReason');
-
-            // Basic Three.js Scene Setup (wrapped in try-catch for critical errors)
+            infoElement = document.getElementById('info'); mainMenuElement = document.getElementById('mainMenu'); scoreboardScreenElement = document.getElementById('scoreboardScreen'); gameOverElement = document.getElementById('gameOver'); characterButtonsElement = document.getElementById('characterButtons'); startGameButton = document.getElementById('startGameButton'); viewScoresButton = document.getElementById('viewScoresButton'); backToMenuButton = document.getElementById('backToMenuButton'); scoreListElement = document.getElementById('scoreList'); noScoresMessageElement = document.getElementById('noScoresMessage'); finalScoreElement = document.getElementById('finalScore'); gameOverReasonElement = document.getElementById('gameOverReason');
             try {
-                scene = new THREE.Scene(); // Create the main scene
-                scene.background = new THREE.Color(0x87CEEB); // Set background color (light sky blue)
+                scene = new THREE.Scene();
+                scene.background = new THREE.Color(0xaaaaaa); // Keep grey background for contrast
 
-                // Setup the perspective camera
-                camera = new THREE.PerspectiveCamera(
-                    65, // Field of view
-                    window.innerWidth / window.innerHeight, // Aspect ratio
-                    0.1, // Near clipping plane
-                    1000 // Far clipping plane
-                );
-                camera.position.set(0, 15, 12); // Initial camera position (slightly above and behind origin)
-                camera.lookAt(0, 0, 0); // Look at the center of the scene
+                camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
+                camera.position.set(0, 15, 12); camera.lookAt(0, 0, 0);
+                renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.shadowMap.enabled = true; // Shadows still enabled, though basic materials won't use them
+                renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                document.body.appendChild(renderer.domElement);
+                renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
 
-                // Setup the WebGL renderer
-                renderer = new THREE.WebGLRenderer({ antialias: true }); // Enable antialiasing
-                renderer.setSize(window.innerWidth, window.innerHeight); // Set size to window dimensions
-                renderer.shadowMap.enabled = true; // Enable shadows
-                renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Use softer shadows for better look
-                document.body.appendChild(renderer.domElement); // Add renderer canvas to the page
-                renderer.toneMapping = THREE.ACESFilmicToneMapping; // Use filmic tone mapping for better colors
-                renderer.toneMappingExposure = 1.0; // Adjust exposure
-
-                // Setup Lighting
-                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); // Increased ambient light slightly
-                scene.add(ambientLight);
-                const hemiLight = new THREE.HemisphereLight( 0xE8E8FF, 0xB0B0B0, 0.6 ); // Sky/ground light effect
-                scene.add( hemiLight );
-                directionalLight = new THREE.DirectionalLight(0xffffff, 0.9); // Main directional light (like sun)
-                directionalLight.position.set(25, 40, 30); // Adjusted light position slightly
-                directionalLight.castShadow = true; // Allow light to cast shadows
-                // Configure shadow properties for quality
-                directionalLight.shadow.mapSize.width = 2048; // Shadow map resolution
-                directionalLight.shadow.mapSize.height = 2048;
-                directionalLight.shadow.camera.near = 1;
-                directionalLight.shadow.camera.far = 100; // Reduced far plane for tighter shadow focus
-                const shadowCamSize = 30; // Area covered by shadows
-                directionalLight.shadow.camera.left = -shadowCamSize;
-                directionalLight.shadow.camera.right = shadowCamSize;
-                directionalLight.shadow.camera.top = shadowCamSize;
-                directionalLight.shadow.camera.bottom = -shadowCamSize;
-                directionalLight.shadow.bias = -0.005; // Adjust shadow bias to prevent artifacts
-                scene.add(directionalLight); // Add light to scene
-                scene.add(directionalLight.target); // Add light target to scene (needed for positioning)
+                // Lighting setup remains, needed for player/obstacles/scenery
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); scene.add(ambientLight);
+                const hemiLight = new THREE.HemisphereLight( 0xE8E8FF, 0xB0B0B0, 0.6 ); scene.add( hemiLight );
+                directionalLight = new THREE.DirectionalLight(0xffffff, 0.9);
+                directionalLight.position.set(25, 40, 30); directionalLight.castShadow = true;
+                directionalLight.shadow.mapSize.width = 2048; directionalLight.shadow.mapSize.height = 2048; directionalLight.shadow.camera.near = 1; directionalLight.shadow.camera.far = 100;
+                const shadowCamSize = 30; directionalLight.shadow.camera.left = -shadowCamSize; directionalLight.shadow.camera.right = shadowCamSize; directionalLight.shadow.camera.top = shadowCamSize; directionalLight.shadow.camera.bottom = -shadowCamSize; directionalLight.shadow.bias = -0.005;
+                scene.add(directionalLight); scene.add(directionalLight.target);
                 console.log("Three.js scene, camera, renderer, lighting setup complete.");
-            } catch (error) {
-                // Handle critical errors during core Three.js setup
-                console.error("Error during Three.js setup:", error);
-                alert("A critical error occurred setting up the 3D scene. The game cannot start.");
-                return; // Stop initialization if core setup fails
-            }
-
-            // Preload textures and define materials
+            } catch (error) { console.error("Error during Three.js setup:", error); alert("A critical error occurred setting up the 3D scene. The game cannot start."); return; }
             preloadAssets();
-
-            // Populate UI Elements & Setup Listeners
             if (characterButtonsElement) populateCharacterButtons(); else console.error("characterButtonsElement not found!");
             if (startGameButton) startGameButton.onclick = startGame; else console.error("startGameButton not found!");
-            // Modified View Scores button to use Firebase listener
-            if (viewScoresButton) {
-                viewScoresButton.onclick = () => {
-                    listenForHighScores(); // Start listening to Firebase
-                    currentGameState = GAME_STATE.SHOW_SCORES;
-                    showOverlay(scoreboardScreenElement);
-                };
-            } else { console.error("viewScoresButton not found!"); }
-            // Modified Back button to detach Firebase listener
-            if (backToMenuButton) {
-                backToMenuButton.onclick = () => {
-                    // Detach listener when leaving scoreboard
-                    if (database) {
-                         database.ref('scores').orderByChild('score').limitToLast(3).off('value');
-                         console.log("Detached Firebase listener.");
-                    }
-                    goToMenu();
-                };
-             } else { console.error("backToMenuButton not found!"); }
-
-            // Add global event listeners
-            window.addEventListener('resize', onWindowResize, false); // Handle window resizing
-            document.addEventListener('keydown', onKeyDown, false); // Handle keyboard input
-
-            // Set Initial Game State
-            goToMenu(); // Start the game at the main menu
-            animate(); // Start the main animation loop
+            if (viewScoresButton) { viewScoresButton.onclick = () => { listenForHighScores(); currentGameState = GAME_STATE.SHOW_SCORES; showOverlay(scoreboardScreenElement); }; } else { console.error("viewScoresButton not found!"); }
+            if (backToMenuButton) { backToMenuButton.onclick = () => { if (database) { database.ref('scores').orderByChild('score').limitToLast(3).off('value'); console.log("Detached Firebase listener."); } goToMenu(); }; } else { console.error("backToMenuButton not found!"); }
+            window.addEventListener('resize', onWindowResize, false);
+            document.addEventListener('keydown', onKeyDown, false);
+            goToMenu();
+            animate();
             console.log("Initialization complete. Starting animation loop.");
         }
 
 
         // --- Game Start Logic ---
-        /**
-         * Resets game state, clears old objects, creates the player and initial lanes.
-         */
         function startGame() {
             console.log("Starting game...");
-            // Reset game variables
             score = 0; playerPosition = { x: 0, z: 0 }; targetPlayerPosition = { x: 0, z: 0 }; lastLaneZ = 0; isMoving = false;
-            infoElement.innerText = `Score: ${score}`; // Update score display
-            infoElement.classList.remove('hidden'); // Show score display
-            lastMoveTime = clock.getElapsedTime(); // Reset idle timer
-
-            clearGameObjects(); // Remove objects from previous game
-
-            // Create the player object
+            infoElement.innerText = `Score: ${score}`;
+            infoElement.classList.remove('hidden');
+            lastMoveTime = clock.getElapsedTime();
+            clearGameObjects();
             createPlayer();
-
-            // Generate the initial game world (lanes, walls, etc.)
             try {
                 console.log("Attempting initial lane generation...");
-                // Check required materials exist
-                if (!laneMaterials[LANE_TYPES.CARPET] || !laneMaterials[LANE_TYPES.WALKWAY] || !laneMaterials[LANE_TYPES.WATER]) {
-                    throw new Error("Cannot start game: One or more lane materials are missing.");
-                 }
+                if (!laneMaterials[LANE_TYPES.CARPET] || !laneMaterials[LANE_TYPES.WALKWAY] || !laneMaterials[LANE_TYPES.WATER]) { throw new Error("Cannot start game: One or more lane materials are missing."); }
                 if (!wallMaterial) { throw new Error("Cannot start game: Wall material is missing."); }
-
-                createLane(LANE_TYPES.CARPET, 0); // Create the starting lane (at z=0)
-                // Generate the initial set of lanes ahead of the player
-                for (let i = 1; i < generationDistance; i++) {
-                    generateLane(); // generateLane calls createLane internally
-                }
+                createLane(LANE_TYPES.CARPET, 0); // Start with carpet
+                for (let i = 1; i < generationDistance; i++) { generateLane(); }
                 console.log("Initial lanes generated successfully.");
-            } catch(error) {
-                 // Handle errors during the critical initial world generation
-                 console.error("FATAL: Error during initial lane generation:", error);
-                 alert("Error creating the game world. Please reload.");
-                 return; // Stop the startGame function if world generation fails
-            }
-
-            // Log initial positions for debugging if needed
+            } catch(error) { console.error("FATAL: Error during initial lane generation:", error); alert("Error creating the game world. Please reload."); return; }
             // console.log(`Initial Camera Position: x=${camera.position.x.toFixed(2)}, y=${camera.position.y.toFixed(2)}, z=${camera.position.z.toFixed(2)}`);
             // if (player) { console.log(`Initial Player Position: x=${player.position.x.toFixed(2)}, y=${player.position.y.toFixed(2)}, z=${player.position.z.toFixed(2)}`); }
             // if (lanes.length > 0 && lanes[0].mesh) { console.log(`Initial Lane 0 Position: x=${lanes[0].mesh.position.x.toFixed(2)}, y=${lanes[0].mesh.position.y.toFixed(2)}, z=${lanes[0].mesh.position.z.toFixed(2)}`); }
-
-            // Reset camera position and look at the player
             camera.position.set(0, 15, 12);
-            if(player) camera.lookAt(player.position.x, player.position.y, player.position.z);
-            else camera.lookAt(0, 0, 0); // Fallback if player creation failed
-
-            // Set game state and UI
+            if(player) camera.lookAt(player.position.x, player.position.y, player.position.z); else camera.lookAt(0, 0, 0);
             currentGameState = GAME_STATE.PLAYING;
-            showOverlay(null); // Hide all overlays
-            if (animationFrameId) cancelAnimationFrame(animationFrameId); // Ensure only one animation loop runs
-            animate(); // Start/ensure animation loop is running
+            showOverlay(null);
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            animate();
             console.log("Game started, state set to PLAYING.");
         }
 
         // --- Game Object Creation Functions ---
-        /**
-         * Creates the player mesh based on selected character and adds it to the scene.
-         */
-        function createPlayer() {
-            try {
-                const selectedChar = CHARACTERS[selectedCharacterIndex];
-                let playerGeometry;
-                let playerMaterial;
+        function createPlayer() { try { const selectedChar = CHARACTERS[selectedCharacterIndex]; let playerGeometry; let playerMaterial; if (selectedChar.imageUrl && characterTextures[selectedCharacterIndex]) { playerGeometry = new THREE.PlaneGeometry(selectedChar.width, selectedChar.height); playerMaterial = new THREE.MeshStandardMaterial({ map: characterTextures[selectedCharacterIndex], transparent: true, side: THREE.DoubleSide, roughness: 0.8, metalness: 0.1 }); console.log(`Using texture for player: ${selectedChar.name}`); } else { playerGeometry = new THREE.BoxGeometry(selectedChar.width * 0.8, selectedChar.height * 0.8, selectedChar.width * 0.8); playerMaterial = new THREE.MeshStandardMaterial({ color: DEFAULT_PLAYER_COLOR, roughness: 0.6, metalness: 0.2 }); console.log(`Using fallback geometry for player: ${selectedChar.name}`); } player = new THREE.Mesh(playerGeometry, playerMaterial); player.position.set(playerPosition.x, selectedChar.height / 2, playerPosition.z); player.rotation.y = Math.PI; player.castShadow = true; player.receiveShadow = false; scene.add(player); if (player.geometry.type === 'PlaneGeometry') { playerBoundingBox = new THREE.Box3().setFromCenterAndSize( player.position, new THREE.Vector3(selectedChar.width, selectedChar.height, 0.5) ); } else { playerBoundingBox = new THREE.Box3().setFromObject(player); } playerBoundingBox.expandByScalar(-0.1); console.log("Player created successfully."); } catch (error) { console.error("Error creating player:", error); } }
 
-                // Use character texture if available, otherwise use fallback colored box
-                if (selectedChar.imageUrl && characterTextures[selectedCharacterIndex]) {
-                    // Use a PlaneGeometry for textured characters
-                    playerGeometry = new THREE.PlaneGeometry(selectedChar.width, selectedChar.height);
-                    playerMaterial = new THREE.MeshStandardMaterial({
-                        map: characterTextures[selectedCharacterIndex], // Apply loaded texture
-                        transparent: true, // Allow transparency from PNG
-                        side: THREE.DoubleSide, // Render both sides of the plane
-                        roughness: 0.8, metalness: 0.1
-                    });
-                    console.log(`Using texture for player: ${selectedChar.name}`);
-                } else {
-                    // Fallback to a simple BoxGeometry if no texture
-                    playerGeometry = new THREE.BoxGeometry(selectedChar.width * 0.8, selectedChar.height * 0.8, selectedChar.width * 0.8);
-                    playerMaterial = new THREE.MeshStandardMaterial({ color: DEFAULT_PLAYER_COLOR, roughness: 0.6, metalness: 0.2 });
-                    console.log(`Using fallback geometry for player: ${selectedChar.name}`);
-                }
-
-                // Create the player mesh
-                player = new THREE.Mesh(playerGeometry, playerMaterial);
-                player.position.set(playerPosition.x, selectedChar.height / 2, playerPosition.z); // Position based on height
-                player.rotation.y = Math.PI; // Rotate to face forward initially
-                player.castShadow = true; // Player casts shadows
-                player.receiveShadow = false; // Player doesn't receive shadows onto itself well
-                scene.add(player); // Add player to the scene
-
-                // Create and store the player's bounding box for collision detection
-                // Adjust bounding box based on geometry type for better accuracy
-                 if (player.geometry.type === 'PlaneGeometry') {
-                     // For planes, create a thin box centered on the plane
-                     playerBoundingBox = new THREE.Box3().setFromCenterAndSize(
-                         player.position,
-                         new THREE.Vector3(selectedChar.width, selectedChar.height, 0.5) // Thin box
-                     );
-                 } else {
-                      // For boxes, use the standard method
-                      playerBoundingBox = new THREE.Box3().setFromObject(player);
-                 }
-                playerBoundingBox.expandByScalar(-0.1); // Shrink slightly for better feel
-
-                console.log("Player created successfully.");
-            } catch (error) {
-                console.error("Error creating player:", error);
-                // Consider how to handle player creation failure (e.g., stop game)
-            }
-        }
-
-        /**
-         * Creates a lane segment of a specific type at a given Z position.
-         * Also triggers creation of walls, scenery, obstacles for the lane.
-         * @param {string} type - The type of lane (e.g., LANE_TYPES.CARPET).
-         * @param {number} zPos - The Z position for the start of the lane segment.
-         */
         function createLane(type, zPos) {
-            let material = laneMaterials[type]; // Use the specific material
-            // Fallback if material wasn't defined correctly
-            if (!material) {
-                 console.warn(`Material for lane type '${type}' is undefined! Using CARPET fallback.`);
-                 material = laneMaterials[LANE_TYPES.CARPET];
-                 if (!material) { // If even fallback fails
-                      console.error(`FATAL: Fallback CARPET material is also undefined! Cannot create lane at z=${zPos}.`);
-                      throw new Error(`Missing material for lane type ${type} and fallback`);
-                 }
-            }
-
+            let material = laneMaterials[type];
+            if (!material) { console.warn(`Material for lane type '${type}' is undefined! Using CARPET fallback.`); material = laneMaterials[LANE_TYPES.CARPET]; if (!material) { console.error(`FATAL: Fallback CARPET material is also undefined! Cannot create lane at z=${zPos}.`); throw new Error(`Missing material for lane type ${type} and fallback`); } }
             try {
-                // --- FIXED: Correct PlaneGeometry dimensions ---
                 const laneGeometry = new THREE.PlaneGeometry(laneWidth, laneLength);
-                const laneMesh = new THREE.Mesh(laneGeometry, material);
-                laneMesh.rotation.x = -Math.PI / 2; // Rotate to be horizontal
-                // --- FIXED: Correct Z positioning ---
-                laneMesh.position.set(0, 0, zPos - laneLength / 2); // Center the lane segment
-                laneMesh.receiveShadow = true; // Allow lane to receive shadows
-                scene.add(laneMesh); // Add lane to the scene
+                const laneMesh = new THREE.Mesh(laneGeometry, material); // Using basic material now
+                laneMesh.rotation.x = -Math.PI / 2;
+                laneMesh.position.set(0, 0, zPos - laneLength / 2);
+                // laneMesh.receiveShadow = true; // Basic materials don't receive shadows
+                scene.add(laneMesh);
+                console.log(`Lane Mesh Added: ${laneMesh.uuid}, z=${laneMesh.position.z.toFixed(2)}, Type: ${type}`); // Log add
 
-                // Store lane data including references to its contents
                 const laneData = { mesh: laneMesh, type: type, z: zPos, obstacles: [], safeSpots: [] };
                 lanes.push(laneData);
 
-                // --- RESTORED: Add associated elements for this lane segment ---
-                createWallSegment(zPos); // Add side walls
+                // Add walls (using basic material)
+                createWallSegment(zPos);
 
-                // Add scenery only to non-water lanes
-                if (type === LANE_TYPES.CARPET || type === LANE_TYPES.WALKWAY) {
-                    addSceneryToLane(laneData); // Pass laneData if needed by sub-functions
-                }
-                // Add safe spots only to water lanes
-                if (type === LANE_TYPES.WATER) {
-                    addSafeSpotsToLane(laneData); // Pass laneData
-                }
-                // Add obstacles to non-water lanes (and not the very first lane at z=0)
-                if (zPos !== 0 && type !== LANE_TYPES.WATER) {
-                    addObstaclesToLane(laneData); // Pass laneData
-                }
-                // --- END RESTORED ---
+                // Add other features (using standard materials)
+                if (type === LANE_TYPES.CARPET || type === LANE_TYPES.WALKWAY) { addSceneryToLane(laneData); }
+                if (type === LANE_TYPES.WATER) { addSafeSpotsToLane(laneData); }
+                if (zPos !== 0 && type !== LANE_TYPES.WATER) { addObstaclesToLane(laneData); }
 
-            } catch (error) {
-                console.error(`Error during creation/population of lane (type: ${type}, z: ${zPos}):`, error);
-                throw error; // Rethrow error to be handled by the caller
-            }
+            } catch (error) { console.error(`Error during creation/population of lane (type: ${type}, z: ${zPos}):`, error); throw error; }
         }
 
-        /**
-         * Creates left and right wall segments for a given lane Z position.
-         * @param {number} zPos - The Z position matching the lane segment.
-         */
         function createWallSegment(zPos) {
-             if (!wallMaterial) {
-                  console.error("FATAL: Wall material is undefined! Cannot create walls at z=", zPos);
-                  return;
-             }
+             if (!wallMaterial) { console.error("FATAL: Wall material is undefined! Cannot create walls at z=", zPos); return; }
              try {
-                // --- FIXED: Correct BoxGeometry dimensions (use laneLength) ---
                 const wallGeometry = new THREE.BoxGeometry(WALL_THICKNESS, WALL_HEIGHT, laneLength);
-                const leftWall = new THREE.Mesh(wallGeometry, wallMaterial);
-                const rightWall = new THREE.Mesh(wallGeometry, wallMaterial);
-
-                // --- FIXED: Correct X and Z positioning ---
+                const leftWall = new THREE.Mesh(wallGeometry, wallMaterial); // Using basic material now
+                const rightWall = new THREE.Mesh(wallGeometry, wallMaterial); // Using basic material now
                 const wallXOffset = laneWidth / 2 + WALL_THICKNESS / 2;
-                const wallZ = zPos - laneLength / 2; // Center Z like the lane
+                const wallZ = zPos - laneLength / 2;
                 leftWall.position.set(-wallXOffset, WALL_HEIGHT / 2, wallZ);
                 rightWall.position.set(wallXOffset, WALL_HEIGHT / 2, wallZ);
-                // --- END FIXES ---
-
-                leftWall.castShadow = true; leftWall.receiveShadow = true;
-                rightWall.castShadow = true; rightWall.receiveShadow = true;
+                // leftWall.castShadow = true; leftWall.receiveShadow = true; // Basic materials don't cast/receive shadows effectively
+                // rightWall.castShadow = true; rightWall.receiveShadow = true;
                 scene.add(leftWall); scene.add(rightWall);
-                // Store wall segment info (consider storing both meshes if needed later)
+                console.log(`Wall Meshes Added: L=${leftWall.uuid}, R=${rightWall.uuid}, z=${wallZ.toFixed(2)}`); // Log add
                 wallSegments.push({ left: leftWall, right: rightWall, z: zPos });
-             } catch(error) {
-                 console.error(`Error creating wall segment mesh at z ${zPos}:`, error);
-             }
+             } catch(error) { console.error(`Error creating wall segment mesh at z ${zPos}:`, error); }
         }
 
-        /**
-         * Adds scenery items (desks, plants) to a non-water lane.
-         * @param {object} laneData - The data object for the current lane.
-         */
-        function addSceneryToLane(laneData) {
-            try {
-                const numSceneryItems = Math.floor(Math.random() * 3) + 1; // 1 to 3 items
-                for (let i = 0; i < numSceneryItems; i++) {
-                    // Position scenery slightly within lane bounds
-                    const xPos = (Math.random() - 0.5) * (laneWidth * 0.8);
-                    // Position along the length of the lane segment
-                    const zOffset = (Math.random() - 0.5) * (laneLength * 0.9);
-                    const itemZ = laneData.z - laneLength / 2 + zOffset;
-
-                    if (Math.random() < 0.7) { // 70% chance of desk
-                        createDesk(xPos, itemZ);
-                    } else { // 30% chance of plant
-                        createPlant(xPos, itemZ);
-                    }
-                }
-            } catch(e){ console.error("Error in addSceneryToLane:", e); }
-        }
-
-        /**
-         * Creates a desk mesh group and adds it to the scene.
-         * @param {number} x - X position.
-         * @param {number} z - Z position.
-         */
-        function createDesk(x, z) {
-            try {
-                if (!sceneryMaterials.desk) { console.warn("Desk material missing"); return; }
-                const deskGroup = new THREE.Group();
-                const topGeo = new THREE.BoxGeometry(2.5, 0.2, 1.5);
-                const legGeo = new THREE.BoxGeometry(0.2, 1.0, 0.2);
-                const top = new THREE.Mesh(topGeo, sceneryMaterials.desk);
-                top.position.y = 1.0 + 0.1; // Legs height + half top thickness
-                top.castShadow = true;
-                deskGroup.add(top);
-                // Position legs relative to the group center
-                const legPositions = [ {x: -1.1, z: -0.6}, {x: 1.1, z: -0.6}, {x: -1.1, z: 0.6}, {x: 1.1, z: 0.6} ];
-                legPositions.forEach(pos => {
-                    const leg = new THREE.Mesh(legGeo, sceneryMaterials.desk);
-                    leg.position.set(pos.x, 0.5, pos.z); // Position leg center relative to group
-                    leg.castShadow = true;
-                    deskGroup.add(leg);
-                });
-                deskGroup.position.set(x, 0, z); // Set group position
-                scene.add(deskGroup);
-                scenery.push(deskGroup); // Add to scenery array for cleanup
-            } catch(e){ console.error("Error in createDesk:", e); }
-        }
-
-        /**
-         * Creates a plant mesh group (pot + leaves) and adds it to the scene.
-         * @param {number} x - X position.
-         * @param {number} z - Z position.
-         */
-        function createPlant(x, z) {
-            try {
-                if (!sceneryMaterials.plantPot || !sceneryMaterials.plantLeaf) { console.warn("Plant material missing"); return; }
-                const plantGroup = new THREE.Group();
-                const potGeo = new THREE.CylinderGeometry(0.5, 0.4, 0.8, 12); // Tapered pot
-                const pot = new THREE.Mesh(potGeo, sceneryMaterials.plantPot);
-                pot.position.y = 0.4; // Pot base at y=0
-                pot.castShadow = true;
-                plantGroup.add(pot);
-                const leafGeo = new THREE.SphereGeometry(0.4, 8, 6); // Simple sphere for leaves
-                const leaves = new THREE.Mesh(leafGeo, sceneryMaterials.plantLeaf);
-                leaves.position.y = 0.8 + 0.3; // Position leaves above pot
-                leaves.castShadow = true;
-                plantGroup.add(leaves);
-                plantGroup.position.set(x, 0, z); // Set group position
-                scene.add(plantGroup);
-                scenery.push(plantGroup); // Add to scenery array for cleanup
-            } catch(e){ console.error("Error in createPlant:", e); }
-        }
-
-        /**
-         * Adds safe spots (lily pads) to a water lane.
-         * @param {object} laneData - The data object for the current water lane.
-         */
-        function addSafeSpotsToLane(laneData) {
-            try {
-                const numSpots = Math.floor(Math.random() * 2) + 1; // 1 or 2 safe spots
-                const spotRadius = 1.0;
-                const spotHeight = 0.1;
-                const spotGeometry = new THREE.CylinderGeometry(spotRadius, spotRadius, spotHeight, 16); // Flat cylinder
-                if (!sceneryMaterials.safeSpot) { console.warn("Safe spot material missing"); return; }
-                const spotMaterial = sceneryMaterials.safeSpot;
-
-                // Ensure spots don't overlap too much
-                let spotPositionsX = [];
-                const attempts = numSpots * 3; // Try a few times to place spots
-                for(let i = 0; i < attempts && spotPositionsX.length < numSpots; i++) {
-                    const xPos = (Math.random() - 0.5) * (laneWidth - spotRadius * 2); // Position within lane width
-                    let overlaps = false;
-                    for(const existingX of spotPositionsX) {
-                        if (Math.abs(xPos - existingX) < spotRadius * 2.2) { // Check for overlap
-                            overlaps = true;
-                            break;
-                        }
-                    }
-                    if (!overlaps) {
-                        spotPositionsX.push(xPos);
-                    }
-                }
-
-                // Create meshes for the determined positions
-                spotPositionsX.forEach(posX => {
-                    const spotMesh = new THREE.Mesh(spotGeometry, spotMaterial);
-                    // Position along the length of the lane segment
-                    const zOffset = (Math.random() - 0.5) * (laneLength * 0.8);
-                    const spotZ = laneData.z - laneLength / 2 + zOffset;
-                    spotMesh.position.set(posX, spotHeight / 2, spotZ); // Position slightly above water
-                    spotMesh.receiveShadow = true; // Can receive shadows
-                    scene.add(spotMesh);
-                    const spotBox = new THREE.Box3().setFromObject(spotMesh); // Bounding box for collision
-                    const spotData = { mesh: spotMesh, x: posX, z: spotZ, boundingBox: spotBox };
-                    laneData.safeSpots.push(spotData); // Add to lane's data
-                    safeSpots.push(spotData); // Add to global list for cleanup
-                });
-             } catch(e){ console.error("Error in addSafeSpotsToLane:", e); }
-        }
-
-        /**
-         * Adds moving obstacles to a non-water lane.
-         * @param {object} laneData - The data object for the current lane.
-         */
-        function addObstaclesToLane(laneData) {
-            try {
-                // Determine number of obstacles based on score (more obstacles as score increases)
-                const maxObstacles = Math.min(3, 1 + Math.floor(score / 20));
-                const numObstacles = Math.floor(Math.random() * maxObstacles) + 1;
-                // Increase speed based on score
-                const speedMultiplier = 1 + Math.min(1.5, score / 100);
-                const baseSpeed = (3 + Math.random() * 4) * speedMultiplier; // Units per second
-                const speed = baseSpeed * (Math.random() < 0.5 ? 1 : -1); // Random direction
-                const direction = Math.sign(speed);
-
-                // Calculate starting position off-screen
-                const startX = direction > 0 ? -laneWidth / 2 - OBSTACLE_PLANE_WIDTH : laneWidth / 2 + OBSTACLE_PLANE_WIDTH;
-                const availableObstacleTypes = Object.values(OBSTACLE_TYPES);
-
-                for (let i = 0; i < numObstacles; i++) {
-                    // Choose a random obstacle type
-                    const randomTypeKey = availableObstacleTypes[Math.floor(Math.random() * availableObstacleTypes.length)];
-                    // Stagger obstacles along the lane's length
-                    const zOffset = (laneLength / (numObstacles + 1)) * (i + 1) - laneLength / 2;
-                    const obstacleZ = laneData.z + zOffset;
-                    // Stagger starting X slightly to prevent perfect overlap initially
-                    const initialX = startX + i * (direction > 0 ? -OBSTACLE_PLANE_WIDTH*0.5 : OBSTACLE_PLANE_WIDTH*0.5);
-                    createObstacle(initialX, obstacleZ, speed, randomTypeKey, laneData.z);
-                }
-            } catch(e){ console.error("Error in addObstaclesToLane:", e); }
-        }
-
-        /**
-         * Creates a single obstacle mesh and adds it to the scene and tracking arrays.
-         * @param {number} x - Initial X position.
-         * @param {number} z - Z position (should be constant for the obstacle).
-         * @param {number} speed - Horizontal speed (units per second).
-         * @param {string} typeKey - The key for the obstacle type (e.g., OBSTACLE_TYPES.CC).
-         * @param {number} laneZ - The Z position of the lane this obstacle belongs to.
-         */
-        function createObstacle(x, z, speed, typeKey, laneZ) {
-            try {
-                const texturesForType = obstacleTextures[typeKey];
-                if (!texturesForType) { console.warn(`Textures not loaded for obstacle type: ${typeKey}. Skipping.`); return; }
-                // Choose texture based on movement direction
-                let texture = speed > 0 ? texturesForType.right : texturesForType.left;
-                // Fallback if one direction is missing
-                if (!texture) { texture = texturesForType.right || texturesForType.left; }
-                if (!texture) { console.error(`No valid texture found for obstacle ${typeKey}`); return; }
-
-                const geometry = new THREE.PlaneGeometry(OBSTACLE_PLANE_WIDTH, OBSTACLE_PLANE_HEIGHT);
-                const material = new THREE.MeshStandardMaterial({
-                    map: texture,
-                    transparent: true, // Needed for PNG transparency
-                    side: THREE.DoubleSide, // Render both sides
-                    roughness: 0.9, metalness: 0.0 // Less reflective material
-                });
-                const obstacleMesh = new THREE.Mesh(geometry, material);
-                obstacleMesh.position.set(x, OBSTACLE_PLANE_HEIGHT / 2, z); // Position center Y at half height
-                obstacleMesh.castShadow = true; // Obstacles cast shadows
-                scene.add(obstacleMesh);
-
-                // Create bounding box for collisions
-                const obstacleBoundingBox = new THREE.Box3().setFromCenterAndSize(
-                    obstacleMesh.position,
-                    new THREE.Vector3(OBSTACLE_PLANE_WIDTH * 0.8, OBSTACLE_PLANE_HEIGHT * 0.8, 0.5) // Slightly smaller box
-                );
-                // Store obstacle data
-                const obstacleData = {
-                    mesh: obstacleMesh,
-                    boundingBox: obstacleBoundingBox,
-                    speed: speed, // Speed in units per second
-                    direction: Math.sign(speed),
-                    laneZ: laneZ, // Store the Z of the lane it belongs to
-                    type: typeKey
-                };
-                obstacles.push(obstacleData); // Add to global obstacles list
-                // Find the laneData object and add obstacle ref to it (if needed for lane-specific logic)
-                const lane = lanes.find(l => l.z === laneZ);
-                if (lane) lane.obstacles.push(obstacleData);
-
-            } catch(e){ console.error("Error in createObstacle:", e); }
-        }
+        function addSceneryToLane(laneData) { try { const numSceneryItems = Math.floor(Math.random() * 3) + 1; for (let i = 0; i < numSceneryItems; i++) { const xPos = (Math.random() - 0.5) * (laneWidth * 0.8); const zOffset = (Math.random() - 0.5) * (laneLength * 0.9); const itemZ = laneData.z - laneLength / 2 + zOffset; if (Math.random() < 0.7) { createDesk(xPos, itemZ); } else { createPlant(xPos, itemZ); } } } catch(e){ console.error("Error in addSceneryToLane:", e); } }
+        function createDesk(x, z) { try { if (!sceneryMaterials.desk) { console.warn("Desk material missing"); return; } const deskGroup = new THREE.Group(); const topGeo = new THREE.BoxGeometry(2.5, 0.2, 1.5); const legGeo = new THREE.BoxGeometry(0.2, 1.0, 0.2); const top = new THREE.Mesh(topGeo, sceneryMaterials.desk); top.position.y = 1.0 + 0.1; top.castShadow = true; deskGroup.add(top); const legPositions = [ {x: -1.1, z: -0.6}, {x: 1.1, z: -0.6}, {x: -1.1, z: 0.6}, {x: 1.1, z: 0.6} ]; legPositions.forEach(pos => { const leg = new THREE.Mesh(legGeo, sceneryMaterials.desk); leg.position.set(pos.x, 0.5, pos.z); leg.castShadow = true; deskGroup.add(leg); }); deskGroup.position.set(x, 0, z); scene.add(deskGroup); scenery.push(deskGroup); } catch(e){ console.error("Error in createDesk:", e); } }
+        function createPlant(x, z) { try { if (!sceneryMaterials.plantPot || !sceneryMaterials.plantLeaf) { console.warn("Plant material missing"); return; } const plantGroup = new THREE.Group(); const potGeo = new THREE.CylinderGeometry(0.5, 0.4, 0.8, 12); const pot = new THREE.Mesh(potGeo, sceneryMaterials.plantPot); pot.position.y = 0.4; pot.castShadow = true; plantGroup.add(pot); const leafGeo = new THREE.SphereGeometry(0.4, 8, 6); const leaves = new THREE.Mesh(leafGeo, sceneryMaterials.plantLeaf); leaves.position.y = 0.8 + 0.3; leaves.castShadow = true; plantGroup.add(leaves); plantGroup.position.set(x, 0, z); scene.add(plantGroup); scenery.push(plantGroup); } catch(e){ console.error("Error in createPlant:", e); } }
+        function addSafeSpotsToLane(laneData) { try { const numSpots = Math.floor(Math.random() * 2) + 1; const spotRadius = 1.0; const spotHeight = 0.1; const spotGeometry = new THREE.CylinderGeometry(spotRadius, spotRadius, spotHeight, 16); if (!sceneryMaterials.safeSpot) { console.warn("Safe spot material missing"); return; } const spotMaterial = sceneryMaterials.safeSpot; let spotPositionsX = []; const attempts = numSpots * 3; for(let i = 0; i < attempts && spotPositionsX.length < numSpots; i++) { const xPos = (Math.random() - 0.5) * (laneWidth - spotRadius * 2); let overlaps = false; for(const existingX of spotPositionsX) { if (Math.abs(xPos - existingX) < spotRadius * 2.2) { overlaps = true; break; } } if (!overlaps) { spotPositionsX.push(xPos); } } spotPositionsX.forEach(posX => { const spotMesh = new THREE.Mesh(spotGeometry, spotMaterial); const zOffset = (Math.random() - 0.5) * (laneLength * 0.8); const spotZ = laneData.z - laneLength / 2 + zOffset; spotMesh.position.set(posX, spotHeight / 2, spotZ); spotMesh.receiveShadow = true; scene.add(spotMesh); const spotBox = new THREE.Box3().setFromObject(spotMesh); const spotData = { mesh: spotMesh, x: posX, z: spotZ, boundingBox: spotBox }; laneData.safeSpots.push(spotData); safeSpots.push(spotData); }); } catch(e){ console.error("Error in addSafeSpotsToLane:", e); } }
+        function addObstaclesToLane(laneData) { try { const maxObstacles = Math.min(3, 1 + Math.floor(score / 20)); const numObstacles = Math.floor(Math.random() * maxObstacles) + 1; const speedMultiplier = 1 + Math.min(1.5, score / 100); const baseSpeed = (3 + Math.random() * 4) * speedMultiplier; const speed = baseSpeed * (Math.random() < 0.5 ? 1 : -1); const direction = Math.sign(speed); const startX = direction > 0 ? -laneWidth / 2 - OBSTACLE_PLANE_WIDTH : laneWidth / 2 + OBSTACLE_PLANE_WIDTH; const availableObstacleTypes = Object.values(OBSTACLE_TYPES); for (let i = 0; i < numObstacles; i++) { const randomTypeKey = availableObstacleTypes[Math.floor(Math.random() * availableObstacleTypes.length)]; const zOffset = (laneLength / (numObstacles + 1)) * (i + 1) - laneLength / 2; const obstacleZ = laneData.z + zOffset; const initialX = startX + i * (direction > 0 ? -OBSTACLE_PLANE_WIDTH*0.5 : OBSTACLE_PLANE_WIDTH*0.5); createObstacle(initialX, obstacleZ, speed, randomTypeKey, laneData.z); } } catch(e){ console.error("Error in addObstaclesToLane:", e); } }
+        function createObstacle(x, z, speed, typeKey, laneZ) { try { const texturesForType = obstacleTextures[typeKey]; if (!texturesForType) { console.warn(`Textures not loaded for obstacle type: ${typeKey}. Skipping.`); return; } let texture = speed > 0 ? texturesForType.right : texturesForType.left; if (!texture) { texture = texturesForType.right || texturesForType.left; } if (!texture) { console.error(`No valid texture found for obstacle ${typeKey}`); return; } const geometry = new THREE.PlaneGeometry(OBSTACLE_PLANE_WIDTH, OBSTACLE_PLANE_HEIGHT); const material = new THREE.MeshStandardMaterial({ map: texture, transparent: true, side: THREE.DoubleSide, roughness: 0.9, metalness: 0.0 }); const obstacleMesh = new THREE.Mesh(geometry, material); obstacleMesh.position.set(x, OBSTACLE_PLANE_HEIGHT / 2, z); obstacleMesh.castShadow = true; scene.add(obstacleMesh); const obstacleBoundingBox = new THREE.Box3().setFromCenterAndSize( obstacleMesh.position, new THREE.Vector3(OBSTACLE_PLANE_WIDTH * 0.8, OBSTACLE_PLANE_HEIGHT * 0.8, 0.5) ); const obstacleData = { mesh: obstacleMesh, boundingBox: obstacleBoundingBox, speed: speed, direction: Math.sign(speed), laneZ: laneZ, type: typeKey }; obstacles.push(obstacleData); const lane = lanes.find(l => l.z === laneZ); if (lane) lane.obstacles.push(obstacleData); } catch(e){ console.error("Error in createObstacle:", e); } }
 
 
         // --- Game Logic ---
-        /**
-         * Handles keyboard input for player movement.
-         * @param {KeyboardEvent} event - The keydown event object.
-         */
-        function onKeyDown(event) {
-            // Ignore input if not playing or already moving
-            if (currentGameState !== GAME_STATE.PLAYING || isMoving) return;
+        function onKeyDown(event) { if (currentGameState !== GAME_STATE.PLAYING || isMoving) return; let moved = false; let targetX = playerPosition.x; let targetZ = playerPosition.z; let isForwardMove = false; switch (event.key) { case 'ArrowUp': case 'w': targetZ -= laneLength; isForwardMove = true; moved = true; break; case 'ArrowDown': case 's': targetZ += laneLength; moved = true; break; case 'ArrowLeft': case 'a': targetX -= laneWidth / 3; moved = true; break; case 'ArrowRight': case 'd': targetX += laneWidth / 3; moved = true; break; } if (moved) { const playerHalfWidth = (player && player.geometry.parameters.width / 2) || 1.0; targetX = Math.max(-laneWidth / 2 + playerHalfWidth, targetX); targetX = Math.min( laneWidth / 2 - playerHalfWidth, targetX); const targetLane = lanes.find(lane => Math.abs(lane.z - targetZ) < 1.0); if (targetLane && targetLane.type === LANE_TYPES.WATER) { console.log("Attempting move onto water lane..."); } targetPlayerPosition.x = targetX; targetPlayerPosition.z = targetZ; isMoving = true; moveStartTime = clock.getElapsedTime() * 1000; lastMoveTime = clock.getElapsedTime(); if (isForwardMove) { score++; infoElement.innerText = `Score: ${score}`; try { generateLane(); } catch (error) { console.error("Error generating new lane during move:", error); gameOver("world_error"); return; } } } }
+        function updatePlayerPosition(deltaTime) { if (!isMoving || !player) return; const elapsedTime = clock.getElapsedTime() * 1000 - moveStartTime; let progress = Math.min(1.0, elapsedTime / moveDuration); const easedProgress = 1 - Math.pow(1 - progress, 3); playerPosition.x = THREE.MathUtils.lerp(player.position.x, targetPlayerPosition.x, easedProgress); playerPosition.z = THREE.MathUtils.lerp(player.position.z, targetPlayerPosition.z, easedProgress); player.position.x = playerPosition.x; player.position.z = playerPosition.z; const playerBaseY = CHARACTERS[selectedCharacterIndex].height / 2; const hopHeight = 0.8; player.position.y = playerBaseY + Math.sin(progress * Math.PI) * hopHeight; if (progress >= 1.0) { isMoving = false; player.position.x = targetPlayerPosition.x; player.position.z = targetPlayerPosition.z; player.position.y = playerBaseY; playerPosition = { ...targetPlayerPosition }; if (playerBoundingBox) { if (player.geometry.type === 'PlaneGeometry') { const character = CHARACTERS[selectedCharacterIndex]; playerBoundingBox.setFromCenterAndSize(player.position, new THREE.Vector3(character.width, character.height, 0.5)); } else { playerBoundingBox.setFromObject(player); } playerBoundingBox.expandByScalar(-0.1); } } }
+        function updateObstacles(deltaTime) { const wrapEdge = laneWidth / 2 + OBSTACLE_PLANE_WIDTH; obstacles.forEach(obstacle => { if (obstacle && obstacle.mesh) { obstacle.mesh.position.x += obstacle.speed * deltaTime; if (obstacle.direction > 0 && obstacle.mesh.position.x > wrapEdge) { obstacle.mesh.position.x = -wrapEdge; } else if (obstacle.direction < 0 && obstacle.mesh.position.x < -wrapEdge) { obstacle.mesh.position.x = wrapEdge; } if (obstacle.boundingBox) { obstacle.boundingBox.setFromCenterAndSize( obstacle.mesh.position, new THREE.Vector3(OBSTACLE_PLANE_WIDTH * 0.8, OBSTACLE_PLANE_HEIGHT * 0.8, 0.5) ); } else { console.warn("Obstacle boundingBox missing, re-initializing."); obstacle.boundingBox = new THREE.Box3().setFromCenterAndSize( obstacle.mesh.position, new THREE.Vector3(OBSTACLE_PLANE_WIDTH * 0.8, OBSTACLE_PLANE_HEIGHT * 0.8, 0.5) ); } } }); }
+        function checkCollisions() { if (!player || !playerBoundingBox || currentGameState !== GAME_STATE.PLAYING || isMoving) return; try { if (player.geometry.type === 'PlaneGeometry') { const character = CHARACTERS[selectedCharacterIndex]; playerBoundingBox.setFromCenterAndSize(player.position, new THREE.Vector3(character.width, character.height, 0.5)); } else { playerBoundingBox.setFromObject(player); } playerBoundingBox.expandByScalar(-0.1); } catch (e) { console.error("Error updating player bounding box during collision check:", e); return; } for (const obstacle of obstacles) { if (obstacle && obstacle.mesh && obstacle.boundingBox && Math.abs(player.position.z - obstacle.laneZ) < 1.0) { if (playerBoundingBox.intersectsBox(obstacle.boundingBox)) { console.log("Collision Detected with obstacle!"); gameOver("hit"); return; } } } const currentLane = lanes.find(lane => player.position.z < lane.z + 1.0 && player.position.z > lane.z - laneLength - 1.0 ); if (currentLane && currentLane.type === LANE_TYPES.WATER) { let onSafeSpot = false; for (const spot of safeSpots) { if (spot && spot.mesh && spot.boundingBox && Math.abs(spot.z - currentLane.z) < 1.0) { if (playerBoundingBox.intersectsBox(spot.boundingBox)) { onSafeSpot = true; break; } } } if (!onSafeSpot) { console.log("Player drowned!"); gameOver("drowned"); return; } } if (clock.getElapsedTime() - lastMoveTime > MAX_IDLE_TIME) { console.log("Idle time exceeded!"); gameOver("idle"); return; } }
+        function generateLane() { const nextZ = lastLaneZ - laneLength; const laneTypes = Object.values(LANE_TYPES); const previousLaneType = lanes.length > 0 ? lanes[lanes.length - 1].type : null; let randomType; const canSpawnWater = score >= 10; const waterProbability = 0.15; if (canSpawnWater && Math.random() < waterProbability && previousLaneType !== LANE_TYPES.WATER) { randomType = LANE_TYPES.WATER; } else { const probabilityOfWalkway = 0.5; randomType = Math.random() < probabilityOfWalkway ? LANE_TYPES.WALKWAY : LANE_TYPES.CARPET; } createLane(randomType, nextZ); lastLaneZ = nextZ; }
+        function cleanupOldObjects() { const cleanupThresholdZ = player ? player.position.z + laneLength * cleanupBuffer : 0; try { lanes = lanes.filter(lane => { if (lane && lane.mesh && lane.z < cleanupThresholdZ) { lane.obstacles.forEach(obstacle => { const index = obstacles.indexOf(obstacle); if (index > -1) obstacles.splice(index, 1); }); lane.safeSpots.forEach(spot => { const index = safeSpots.indexOf(spot); if (index > -1) safeSpots.splice(index, 1); }); scene.remove(lane.mesh); if (lane.mesh.geometry) lane.mesh.geometry.dispose(); return false; } return true; }); wallSegments = wallSegments.filter(wall => { if (wall && wall.left && wall.right && wall.z < cleanupThresholdZ) { scene.remove(wall.left); scene.remove(wall.right); if (wall.left.geometry) wall.left.geometry.dispose(); return false; } return true; }); obstacles = obstacles.filter(obstacle => { if (obstacle && obstacle.mesh && obstacle.mesh.position.z > cleanupThresholdZ + laneLength) { scene.remove(obstacle.mesh); if (obstacle.mesh.geometry) obstacle.mesh.geometry.dispose(); if (obstacle.mesh.material) obstacle.mesh.material.dispose(); return false; } return true; }); scenery = scenery.filter(item => { let itemZ = cleanupThresholdZ - 1; if (item) { if (item.position) itemZ = item.position.z; else if (item.children && item.children.length > 0 && item.children[0].position) { itemZ = item.getWorldPosition(new THREE.Vector3()).z; } } if (item && itemZ > cleanupThresholdZ + laneLength) { scene.remove(item); item.traverse(child => { if (child.isMesh && child.geometry) { child.geometry.dispose(); } }); return false; } return true; }); safeSpots = safeSpots.filter(spot => { if (spot && spot.mesh && spot.z > cleanupThresholdZ + laneLength) { scene.remove(spot.mesh); if (spot.mesh.geometry) spot.mesh.geometry.dispose(); return false; } return true; }); } catch (error) { console.error("Error during object cleanup:", error); } }
 
-            let moved = false; // Flag to check if a valid move key was pressed
-            let targetX = playerPosition.x; // Start with current position
-            let targetZ = playerPosition.z;
-            let isForwardMove = false;
+        // --- Animation Loop ---
+        function animate() { animationFrameId = requestAnimationFrame(animate); const deltaTime = clock.getDelta(); try { if (currentGameState === GAME_STATE.PLAYING) { updatePlayerPosition(deltaTime); updateObstacles(deltaTime); checkCollisions(); if (player) { const targetCameraPos = new THREE.Vector3( player.position.x * 0.2, camera.position.y, player.position.z + 12 ); camera.position.lerp(targetCameraPos, deltaTime * 2.5); const targetLookAt = new THREE.Vector3(player.position.x * 0.5, player.position.y * 0.5, player.position.z); const currentLookAt = new THREE.Vector3(); camera.getWorldDirection(currentLookAt).multiplyScalar(15).add(camera.position); currentLookAt.lerp(targetLookAt, deltaTime * 3.0); camera.lookAt(currentLookAt); if (directionalLight && directionalLight.target) { directionalLight.target.position.copy(player.position); directionalLight.target.updateMatrixWorld(); } if (directionalLight && directionalLight.shadow) { const shadowCam = directionalLight.shadow.camera; const followOffset = 15; const shadowSize = 25; shadowCam.left = player.position.x - shadowSize; shadowCam.right = player.position.x + shadowSize; shadowCam.top = player.position.z + shadowSize - followOffset; shadowCam.bottom = player.position.z - shadowSize - followOffset; shadowCam.updateProjectionMatrix(); } } cleanupOldObjects(); } } catch (error) { console.error("Error during game update loop:", error); } if (renderer && scene && camera) { try { renderer.render(scene, camera); } catch (error) { console.error("Error during rendering:", error); if (animationFrameId) cancelAnimationFrame(animationFrameId); animationFrameId = null; alert("A rendering error occurred. Please reload the page."); } } }
 
-            // Determine target position based on key press
-            switch (event.key) {
-                case 'ArrowUp': case 'w': targetZ -= laneLength; isForwardMove = true; moved = true; break;
-                case 'ArrowDown': case 's': targetZ += laneLength; moved = true; break; // Allow moving back
-                case 'ArrowLeft': case 'a': targetX -= laneWidth / 3; moved = true; break; // Move left
-                case 'ArrowRight': case 'd': targetX += laneWidth / 3; moved = true; break; // Move right
-            }
+        // --- Game Over ---
+        function gameOver(reason = "hit") { if (currentGameState === GAME_STATE.GAME_OVER) return; currentGameState = GAME_STATE.GAME_OVER; console.log(`Game Over! Score: ${score}, Reason: ${reason}`); if(finalScoreElement) finalScoreElement.innerText = score; if(gameOverReasonElement) { if (reason === "idle" || reason === "idle_test") { gameOverReasonElement.innerText = "Took too long!"; } else if (reason === "drowned") { gameOverReasonElement.innerText = "Fell in the water cooler!"; } else if (reason === "world_error") { gameOverReasonElement.innerText = "Game world error!"; } else { gameOverReasonElement.innerText = "Deadline Missed!"; } } showOverlay(gameOverElement); if(infoElement) infoElement.classList.add('hidden'); const characterName = CHARACTERS[selectedCharacterIndex]?.name || "Unknown"; submitScoreToFirebase(characterName, score); }
 
-            // If a valid move key was pressed
-            if (moved) {
-                // Clamp horizontal movement to stay within lane bounds
-                const playerHalfWidth = (player && player.geometry.parameters.width / 2) || 1.0; // Estimate if needed
-                targetX = Math.max(-laneWidth / 2 + playerHalfWidth, targetX); // Clamp left
-                targetX = Math.min( laneWidth / 2 - playerHalfWidth, targetX); // Clamp right
+        // --- Go To Menu ---
+        function goToMenu() { currentGameState = GAME_STATE.MENU; showOverlay(mainMenuElement); if(camera) { camera.position.set(0, 15, 12); camera.lookAt(0, 0, 0); } if (!animationFrameId) animate(); }
 
-                // --- Water Check (Simplified - Check target Z only) ---
-                // Find the potential target lane
-                 const targetLane = lanes.find(lane => Math.abs(lane.z - targetZ) < 1.0); // Find lane near target Z
-                 if (targetLane && targetLane.type === LANE_TYPES.WATER) {
-                     // For simplicity now, assume drown unless on a safe spot (more complex check needed later)
-                     // This simplified check might trigger gameOver prematurely if moving within water lane
-                     // A better check would involve finding safe spots near targetX, targetZ
-                     console.log("Attempting move onto water lane...");
-                     // Let's allow the move for now and check collision in checkCollisions
-                     // triggerGameOver("drowned"); // Temporarily disable instant drown on move attempt
-                     // return; // Stop move if drowning
-                 }
-                // --- End Water Check ---
-
-                // Set the target position for animation
-                targetPlayerPosition.x = targetX;
-                targetPlayerPosition.z = targetZ;
-                isMoving = true; // Set moving flag
-                moveStartTime = clock.getElapsedTime() * 1000; // Record start time in ms
-                lastMoveTime = clock.getElapsedTime(); // Reset idle timer
-
-                // If moving forward, increase score and generate a new lane ahead
-                if (isForwardMove) {
-                    score++;
-                    infoElement.innerText = `Score: ${score}`; // Update score display
-                    try {
-                        generateLane(); // Generate the next lane segment
-                    } catch (error) {
-                        console.error("Error generating new lane during move:", error);
-                        gameOver("world_error"); // Trigger game over if world generation fails
-                        return; // Stop further processing for this move
-                    }
-                }
-            }
-        }
-
-        /**
-         * Updates the player's visual position smoothly using interpolation (Lerp).
-         * Includes a hop animation.
-         * @param {number} deltaTime - Time elapsed since the last frame.
-         */
-        function updatePlayerPosition(deltaTime) {
-            if (!isMoving || !player) return; // Only update if moving and player exists
-
-            // Calculate movement progress (0 to 1)
-            const elapsedTime = clock.getElapsedTime() * 1000 - moveStartTime;
-            let progress = Math.min(1.0, elapsedTime / moveDuration);
-
-            // Apply easing function for smoother start/end (e.g., cubic ease-out)
-            const easedProgress = 1 - Math.pow(1 - progress, 3);
-
-            // Interpolate logical position
-            playerPosition.x = THREE.MathUtils.lerp(player.position.x, targetPlayerPosition.x, easedProgress);
-            playerPosition.z = THREE.MathUtils.lerp(player.position.z, targetPlayerPosition.z, easedProgress);
-
-            // Update the player mesh's actual position
-            player.position.x = playerPosition.x;
-            player.position.z = playerPosition.z;
-
-            // Add hop animation
-            const playerBaseY = CHARACTERS[selectedCharacterIndex].height / 2;
-            const hopHeight = 0.8; // Adjust hop height
-            player.position.y = playerBaseY + Math.sin(progress * Math.PI) * hopHeight;
-
-            // When movement is complete
-            if (progress >= 1.0) {
-                isMoving = false; // Clear moving flag
-                // Snap to exact target position to avoid floating point inaccuracies
-                player.position.x = targetPlayerPosition.x;
-                player.position.z = targetPlayerPosition.z;
-                player.position.y = playerBaseY; // Ensure player is back on the ground
-                playerPosition = { ...targetPlayerPosition }; // Update logical position state
-
-                // Update bounding box after move completes
-                if (playerBoundingBox) {
-                    if (player.geometry.type === 'PlaneGeometry') {
-                        const character = CHARACTERS[selectedCharacterIndex];
-                        playerBoundingBox.setFromCenterAndSize(player.position, new THREE.Vector3(character.width, character.height, 0.5));
-                    } else {
-                        playerBoundingBox.setFromObject(player);
-                    }
-                     playerBoundingBox.expandByScalar(-0.1); // Re-apply shrinkage
-                }
-            }
-        }
-
-        /**
-         * Updates the position of all obstacles based on their speed and delta time.
-         * Handles wrapping around the screen edges.
-         * @param {number} deltaTime - Time elapsed since the last frame (in seconds).
-         */
-        function updateObstacles(deltaTime) {
-            const wrapEdge = laneWidth / 2 + OBSTACLE_PLANE_WIDTH; // Position where obstacles wrap
-            obstacles.forEach(obstacle => {
-                // Check if obstacle and mesh exist before updating
-                if (obstacle && obstacle.mesh) {
-                    // Move obstacle based on its speed and delta time
-                    obstacle.mesh.position.x += obstacle.speed * deltaTime;
-
-                    // Wrap obstacle around horizontally
-                    if (obstacle.direction > 0 && obstacle.mesh.position.x > wrapEdge) {
-                        obstacle.mesh.position.x = -wrapEdge; // Wrap to left
-                    } else if (obstacle.direction < 0 && obstacle.mesh.position.x < -wrapEdge) {
-                        obstacle.mesh.position.x = wrapEdge; // Wrap to right
-                    }
-
-                    // Update the obstacle's bounding box after moving
-                     if (obstacle.boundingBox) {
-                         // Update bounding box based on mesh's new position
-                         obstacle.boundingBox.setFromCenterAndSize(
-                             obstacle.mesh.position,
-                             new THREE.Vector3(OBSTACLE_PLANE_WIDTH * 0.8, OBSTACLE_PLANE_HEIGHT * 0.8, 0.5) // Use consistent size
-                         );
-                     } else {
-                          console.warn("Obstacle boundingBox missing, re-initializing.");
-                          obstacle.boundingBox = new THREE.Box3().setFromCenterAndSize(
-                             obstacle.mesh.position,
-                             new THREE.Vector3(OBSTACLE_PLANE_WIDTH * 0.8, OBSTACLE_PLANE_HEIGHT * 0.8, 0.5)
-                         );
-                     }
-                }
-            });
-        }
-
-        /**
-         * Checks for collisions between the player and obstacles, water (if not on safe spot),
-         * and checks for idle timeout.
-         */
-        function checkCollisions() {
-            // Exit if not playing, player doesn't exist, or currently moving (collision checked on move end)
-            if (!player || !playerBoundingBox || currentGameState !== GAME_STATE.PLAYING || isMoving) return;
-
-            // Update player's bounding box (already updated at end of move, but good practice)
-            try {
-                 if (player.geometry.type === 'PlaneGeometry') {
-                     const character = CHARACTERS[selectedCharacterIndex];
-                     playerBoundingBox.setFromCenterAndSize(player.position, new THREE.Vector3(character.width, character.height, 0.5));
-                 } else {
-                      playerBoundingBox.setFromObject(player);
-                 }
-                  playerBoundingBox.expandByScalar(-0.1); // Re-apply shrinkage
-            } catch (e) {
-                 console.error("Error updating player bounding box during collision check:", e);
-                 return; // Cannot check collisions if bounding box fails
-            }
-
-            // 1. Check Obstacle Collisions
-            for (const obstacle of obstacles) {
-                 // Check if obstacle, mesh, and bounding box exist
-                 // Check if player Z is close enough to obstacle's lane Z
-                 if (obstacle && obstacle.mesh && obstacle.boundingBox &&
-                     Math.abs(player.position.z - obstacle.laneZ) < 1.0) { // Check if on the same lane Z
-                     if (playerBoundingBox.intersectsBox(obstacle.boundingBox)) {
-                         console.log("Collision Detected with obstacle!");
-                         gameOver("hit"); // Trigger game over (hit obstacle)
-                         return; // Stop checking further collisions
-                     }
-                 }
-            }
-
-            // 2. Check Water Collision
-            // Find the lane the player is currently over
-            const currentLane = lanes.find(lane =>
-                player.position.z < lane.z + 1.0 && player.position.z > lane.z - laneLength - 1.0 // More tolerant Z check
-            );
-            // If the player is on a water lane
-            if (currentLane && currentLane.type === LANE_TYPES.WATER) {
-                 // Check if the player's bounding box center is intersecting any safe spot bounding box
-                 let onSafeSpot = false;
-                 for (const spot of safeSpots) {
-                     // Check if spot exists and its Z matches the current lane
-                     if (spot && spot.mesh && spot.boundingBox && Math.abs(spot.z - currentLane.z) < 1.0) {
-                         // Use bounding box intersection for better check
-                         if (playerBoundingBox.intersectsBox(spot.boundingBox)) {
-                             onSafeSpot = true;
-                             break; // Player is safe
-                         }
-                     }
-                 }
-                 // If not on a safe spot while on water, game over
-                 if (!onSafeSpot) {
-                     console.log("Player drowned!");
-                     gameOver("drowned");
-                     return;
-                 }
-            }
-
-            // 3. Check Idle Timeout
-            // If time since last move exceeds the limit
-            if (clock.getElapsedTime() - lastMoveTime > MAX_IDLE_TIME) {
-                 console.log("Idle time exceeded!");
-                gameOver("idle"); // Trigger game over (idle timeout)
-                return;
-            }
-        }
-
-        /**
-         * Generates the next lane segment ahead of the player based on game logic.
-         */
-        function generateLane() {
-            const nextZ = lastLaneZ - laneLength; // Calculate Z position for the new lane
-            const laneTypes = Object.values(LANE_TYPES); // Get available lane types
-            const previousLaneType = lanes.length > 0 ? lanes[lanes.length - 1].type : null; // Get type of the last lane
-            let randomType;
-
-            // Logic to slightly bias away from water after a water lane
-            // Also, only spawn water after a certain score threshold
-            const canSpawnWater = score >= 10; // Example threshold
-            const waterProbability = 0.15; // Chance of water spawning if possible
-            if (canSpawnWater && Math.random() < waterProbability && previousLaneType !== LANE_TYPES.WATER) {
-                 randomType = LANE_TYPES.WATER;
-            } else { // Normal random selection between carpet and walkway
-                 const probabilityOfWalkway = 0.5; // Adjust probability as needed
-                 randomType = Math.random() < probabilityOfWalkway ? LANE_TYPES.WALKWAY : LANE_TYPES.CARPET;
-            }
-
-            // Create the new lane (this call might throw an error if materials are missing)
-            createLane(randomType, nextZ);
-            lastLaneZ = nextZ; // Update the position of the furthest generated lane
-        }
-
-        /**
-         * Removes game objects (lanes, walls, obstacles, scenery, safe spots)
-         * that are far behind the player to improve performance.
-         */
-        function cleanupOldObjects() {
-            // Determine the Z threshold for cleanup based on player position and buffer
-            const cleanupThresholdZ = player ? player.position.z + laneLength * cleanupBuffer : 0;
-
-            try { // Wrap cleanup logic in try-catch for safety
-                // --- Cleanup Lanes ---
-                lanes = lanes.filter(lane => {
-                    // Check if lane exists and is behind threshold
-                    if (lane && lane.mesh && lane.z < cleanupThresholdZ) {
-                        // Remove associated obstacles/safespots first (from global arrays)
-                        lane.obstacles.forEach(obstacle => {
-                            const index = obstacles.indexOf(obstacle);
-                            if (index > -1) obstacles.splice(index, 1);
-                            // Mesh removed below if filtered out from global obstacles array
-                        });
-                        lane.safeSpots.forEach(spot => {
-                            const index = safeSpots.indexOf(spot);
-                            if (index > -1) safeSpots.splice(index, 1);
-                            // Mesh removed below if filtered out from global safeSpots array
-                        });
-                        // Remove lane mesh itself
-                        scene.remove(lane.mesh);
-                        if (lane.mesh.geometry) lane.mesh.geometry.dispose();
-                        // Note: Materials are usually shared, dispose carefully if needed
-                        return false; // Remove from lanes array
-                    }
-                    return true; // Keep in lanes array
-                });
-
-                // --- Cleanup Walls ---
-                wallSegments = wallSegments.filter(wall => {
-                    if (wall && wall.left && wall.right && wall.z < cleanupThresholdZ) {
-                        scene.remove(wall.left);
-                        scene.remove(wall.right);
-                        // Dispose geometry only once (assuming it's shared)
-                        if (wall.left.geometry) wall.left.geometry.dispose();
-                        return false; // Remove from wallSegments array
-                    }
-                    return true;
-                });
-
-                // --- Cleanup Obstacles (that might not belong to a removed lane yet) ---
-                obstacles = obstacles.filter(obstacle => {
-                    if (obstacle && obstacle.mesh && obstacle.mesh.position.z > cleanupThresholdZ + laneLength) { // Check if far ahead
-                        scene.remove(obstacle.mesh);
-                        if (obstacle.mesh.geometry) obstacle.mesh.geometry.dispose();
-                        if (obstacle.mesh.material) obstacle.mesh.material.dispose();
-                        return false; // Remove from obstacles array
-                    }
-                    return true;
-                });
-
-                // --- Cleanup Scenery ---
-                scenery = scenery.filter(item => {
-                    // Check position, considering groups might not have direct position
-                    let itemZ = cleanupThresholdZ - 1; // Default to keep if position unknown
-                    if (item) {
-                         if (item.position) itemZ = item.position.z;
-                         else if (item.children && item.children.length > 0 && item.children[0].position) {
-                              itemZ = item.getWorldPosition(new THREE.Vector3()).z; // Get world Z for groups
-                         }
-                    }
-
-                    if (item && itemZ > cleanupThresholdZ + laneLength) { // Check if far ahead
-                        scene.remove(item);
-                        // Dispose geometry of children within the scenery group
-                        item.traverse(child => { if (child.isMesh && child.geometry) { child.geometry.dispose(); } });
-                        return false; // Remove from scenery array
-                    }
-                    return true;
-                });
-
-                 // --- Cleanup Safe Spots (that might not belong to a removed lane yet) ---
-                safeSpots = safeSpots.filter(spot => {
-                    if (spot && spot.mesh && spot.z > cleanupThresholdZ + laneLength) { // Check if far ahead
-                        scene.remove(spot.mesh);
-                        if (spot.mesh.geometry) spot.mesh.geometry.dispose();
-                        return false; // Remove from safeSpots array
-                    }
-                    return true;
-                });
-            } catch (error) {
-                 console.error("Error during object cleanup:", error);
-            }
-        }
-
-        // --- Main Animation Loop ---
-        /**
-         * The core game loop, called repeatedly using requestAnimationFrame.
-         * Updates game logic, camera, and renders the scene.
-         */
-        function animate() {
-            // Request the next frame
-            animationFrameId = requestAnimationFrame(animate);
-            const deltaTime = clock.getDelta(); // Get time since last frame
-
-            try { // Wrap game logic updates in try-catch
-                // Only update game logic if in PLAYING state
-                if (currentGameState === GAME_STATE.PLAYING) {
-                    updatePlayerPosition(deltaTime); // Update player movement animation
-                    updateObstacles(deltaTime); // Update obstacle positions
-                    checkCollisions(); // Check for player collisions
-
-                    // Update camera to follow player smoothly
-                    if (player) {
-                        const targetCameraPos = new THREE.Vector3(
-                            player.position.x * 0.2, // Dampen X follow slightly
-                            camera.position.y, // Keep camera height fixed
-                            player.position.z + 12 // Stay a fixed distance behind player
-                        );
-                        // Interpolate camera position for smooth follow
-                        camera.position.lerp(targetCameraPos, deltaTime * 2.5); // Adjust lerp factor for follow speed
-
-                        // Smooth lookAt adjustment
-                        const targetLookAt = new THREE.Vector3(player.position.x * 0.5, player.position.y * 0.5, player.position.z);
-                        const currentLookAt = new THREE.Vector3();
-                        camera.getWorldDirection(currentLookAt).multiplyScalar(15).add(camera.position); // Get current lookAt point
-                        currentLookAt.lerp(targetLookAt, deltaTime * 3.0); // Interpolate towards player
-                        camera.lookAt(currentLookAt);
-
-
-                        // Update directional light target to follow player (improves shadow focus)
-                        if (directionalLight && directionalLight.target) {
-                            directionalLight.target.position.copy(player.position);
-                            directionalLight.target.updateMatrixWorld(); // Important after moving target
-                        }
-
-                        // Dynamically adjust shadow camera frustum to follow player (maintains shadow quality)
-                        if (directionalLight && directionalLight.shadow) {
-                            const shadowCam = directionalLight.shadow.camera;
-                            const followOffset = 15; // How far shadow focuses ahead/behind
-                            const shadowSize = 25; // Size of the focused shadow area
-                            shadowCam.left = player.position.x - shadowSize;
-                            shadowCam.right = player.position.x + shadowSize;
-                            shadowCam.top = player.position.z + shadowSize - followOffset;
-                            shadowCam.bottom = player.position.z - shadowSize - followOffset;
-                            shadowCam.updateProjectionMatrix(); // Apply changes to shadow camera
-                        }
-                    }
-                    // Remove objects far behind the player
-                    cleanupOldObjects();
-                }
-            } catch (error) {
-                console.error("Error during game update loop:", error);
-                // Consider pausing game or showing error state if updates fail
-            }
-
-            // Always render the scene (even in menu/game over states)
-            if (renderer && scene && camera) {
-                try { // Wrap rendering call in try-catch
-                    renderer.render(scene, camera);
-                } catch (error) {
-                     // Handle critical rendering errors
-                     console.error("Error during rendering:", error);
-                     if (animationFrameId) cancelAnimationFrame(animationFrameId); // Stop the loop
-                     animationFrameId = null;
-                     alert("A rendering error occurred. Please reload the page.");
-                }
-            }
-        }
-
-        // --- Game Over Function ---
-        /**
-         * Handles the game over sequence: sets state, shows overlay, submits score to Firebase.
-         * @param {string} [reason="hit"] - The reason for game over (e.g., "hit", "drowned", "idle").
-         */
-        function gameOver(reason = "hit") {
-            // Prevent multiple game over calls
-            if (currentGameState === GAME_STATE.GAME_OVER) return;
-            currentGameState = GAME_STATE.GAME_OVER; // Set state
-
-            console.log(`Game Over! Score: ${score}, Reason: ${reason}`);
-            if(finalScoreElement) finalScoreElement.innerText = score; // Display final score
-
-            // Display appropriate game over message based on reason
-            if(gameOverReasonElement) {
-                 if (reason === "idle" || reason === "idle_test") { gameOverReasonElement.innerText = "Took too long!"; }
-                 else if (reason === "drowned") { gameOverReasonElement.innerText = "Fell in the water cooler!"; }
-                 else if (reason === "world_error") { gameOverReasonElement.innerText = "Game world error!"; }
-                 else { gameOverReasonElement.innerText = "Deadline Missed!"; } // Default "hit" reason
-            }
-
-            showOverlay(gameOverElement); // Show the game over screen
-            if(infoElement) infoElement.classList.add('hidden'); // Hide in-game score
-
-            // --- Submit score to Firebase ---
-            const characterName = CHARACTERS[selectedCharacterIndex]?.name || "Unknown"; // Get selected character name safely
-            submitScoreToFirebase(characterName, score);
-            // --- End Firebase submission ---
-
-            // Optional: Stop the animation loop on game over
-            // cancelAnimationFrame(animationFrameId);
-            // animationFrameId = null;
-        }
-
-        // --- Go To Menu Function ---
-        /**
-         * Switches the game state back to the main menu.
-         */
-        function goToMenu() {
-            currentGameState = GAME_STATE.MENU; // Set state to MENU
-            showOverlay(mainMenuElement); // Show the main menu overlay
-            // Reset camera to default menu position/view
-            if(camera) {
-                camera.position.set(0, 15, 12);
-                camera.lookAt(0, 0, 0);
-            }
-            // Ensure animation loop is running if it was stopped
-            if (!animationFrameId) animate();
-        }
-
-        // --- Clear Game Objects Function ---
-        /**
-         * Removes all dynamic game objects (player, lanes, obstacles, etc.) from the scene
-         * and disposes of their geometries/materials to free up memory.
-         */
-        function clearGameObjects() {
-            console.log("Clearing game objects...");
-            // Remove Player
-            if (player) {
-                 if (scene && player.parent === scene) scene.remove(player); // Remove only if attached to scene
-                 if (player.geometry) player.geometry.dispose();
-                 if (player.material) {
-                      if (Array.isArray(player.material)) player.material.forEach(m => m.dispose());
-                      else player.material.dispose();
-                 }
-            }
-            player = null; playerBoundingBox = null;
-
-            // Remove Lanes
-            lanes.forEach(lane => { if (lane && lane.mesh) { if(scene && lane.mesh.parent === scene) scene.remove(lane.mesh); if(lane.mesh.geometry) lane.mesh.geometry.dispose(); } });
-            lanes = [];
-
-             // Remove Walls
-            wallSegments.forEach(wall => { if (wall) { if(wall.left && scene && wall.left.parent === scene) scene.remove(wall.left); if(wall.right && scene && wall.right.parent === scene) scene.remove(wall.right); if(wall.left && wall.left.geometry) wall.left.geometry.dispose(); } }); // Dispose geometry once
-            wallSegments = [];
-
-            // Remove Obstacles
-            obstacles.forEach(obstacle => { if (obstacle && obstacle.mesh) { if(scene && obstacle.mesh.parent === scene) scene.remove(obstacle.mesh); if(obstacle.mesh.geometry) obstacle.mesh.geometry.dispose(); if(obstacle.mesh.material) { if (Array.isArray(obstacle.mesh.material)) obstacle.mesh.material.forEach(m => m.dispose()); else obstacle.mesh.material.dispose(); } } });
-            obstacles = [];
-
-            // Remove Scenery
-            scenery.forEach(item => { if (item) { if(scene && item.parent === scene) scene.remove(item); item.traverse(child => { if (child.isMesh) { if(child.geometry) child.geometry.dispose(); if(child.material) { if (Array.isArray(child.material)) child.material.forEach(m => m.dispose()); else child.material.dispose(); } } }); } });
-            scenery = [];
-
-             // Remove Safe Spots
-            safeSpots.forEach(spot => { if (spot && spot.mesh) { if(scene && spot.mesh.parent === scene) scene.remove(spot.mesh); if(spot.mesh.geometry) spot.mesh.geometry.dispose(); } });
-            safeSpots = [];
-
-            // Reset score display
-            score = 0;
-            if(infoElement) infoElement.innerText = `Score: ${score}`;
-            console.log("Game objects cleared.");
-        }
+        // --- Clear Game Objects ---
+        function clearGameObjects() { console.log("Clearing game objects..."); if (player) { if (scene && player.parent === scene) scene.remove(player); if (player.geometry) player.geometry.dispose(); if (player.material) { if (Array.isArray(player.material)) player.material.forEach(m => m.dispose()); else player.material.dispose(); } } player = null; playerBoundingBox = null; lanes.forEach(lane => { if (lane && lane.mesh) { if(scene && lane.mesh.parent === scene) scene.remove(lane.mesh); if(lane.mesh.geometry) lane.mesh.geometry.dispose(); } }); lanes = []; wallSegments.forEach(wall => { if (wall) { if(wall.left && scene && wall.left.parent === scene) scene.remove(wall.left); if(wall.right && scene && wall.right.parent === scene) scene.remove(wall.right); if(wall.left && wall.left.geometry) wall.left.geometry.dispose(); } }); wallSegments = []; obstacles.forEach(obstacle => { if (obstacle && obstacle.mesh) { if(scene && obstacle.mesh.parent === scene) scene.remove(obstacle.mesh); if(obstacle.mesh.geometry) obstacle.mesh.geometry.dispose(); if(obstacle.mesh.material) { if (Array.isArray(obstacle.mesh.material)) obstacle.mesh.material.forEach(m => m.dispose()); else obstacle.mesh.material.dispose(); } } }); obstacles = []; scenery.forEach(item => { if (item) { if(scene && item.parent === scene) scene.remove(item); item.traverse(child => { if (child.isMesh) { if(child.geometry) child.geometry.dispose(); if(child.material) { if (Array.isArray(child.material)) child.material.forEach(m => m.dispose()); else child.material.dispose(); } } }); } }); scenery = []; safeSpots.forEach(spot => { if (spot && spot.mesh) { if(scene && spot.mesh.parent === scene) scene.remove(spot.mesh); if(spot.mesh.geometry) spot.mesh.geometry.dispose(); } }); safeSpots = []; score = 0; if(infoElement) infoElement.innerText = `Score: ${score}`; console.log("Game objects cleared."); }
 
 
         // --- Resize Handler ---
-        /**
-         * Adjusts camera aspect ratio and renderer size on window resize.
-         */
-        function onWindowResize() {
-            if (camera && renderer) {
-                camera.aspect = window.innerWidth / window.innerHeight; // Update aspect ratio
-                camera.updateProjectionMatrix(); // Apply changes to camera
-                renderer.setSize(window.innerWidth, window.innerHeight); // Resize renderer
-            }
-        }
+        function onWindowResize() { if (camera && renderer) { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); } }
 
         // --- Start the application ---
-        // Wait for the DOM to be fully loaded before initializing the game
-        document.addEventListener('DOMContentLoaded', (event) => {
-            console.log("DOM fully loaded and parsed");
-            init(); // Call the main initialization function
-        });
+        document.addEventListener('DOMContentLoaded', (event) => { console.log("DOM fully loaded and parsed"); init(); });
 
     </script>
 </body>
