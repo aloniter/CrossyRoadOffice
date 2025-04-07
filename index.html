@@ -216,7 +216,9 @@
             firebase.initializeApp(firebaseConfig);
         } catch (e) {
             console.error("Firebase initialization failed:", e);
-            alert("Could not connect to Firebase. High scores may not work.");
+            // Avoid using alert() in production code if possible
+            // alert("Could not connect to Firebase. High scores may not work.");
+            console.warn("Could not connect to Firebase. High scores may not work.");
         }
         const db = firebase.firestore(); // Get a Firestore instance
         const highScoresCollection = db.collection('highscores'); // Reference to the 'highscores' collection
@@ -261,6 +263,7 @@
 
         // --- Character Definitions ---
         // Add or remove characters here. Ensure image paths are correct relative to the HTML file.
+        // If an image fails to load, a default colored box will be used.
         const CHARACTERS = [
              { name: 'Alon', imageUrl: 'Alon.png', width: 2.8, height: 3.36 },
              { name: 'Sahar', imageUrl: 'Sahar.png', width: 2.8, height: 3.36 },
@@ -277,6 +280,10 @@
              { name: 'May Boss', imageUrl: 'May Boss.png', width: 2.8, height: 3.36 },
              { name: 'May QA', imageUrl: 'May QA.png', width: 2.8, height: 3.36 },
              { name: 'Ofek', imageUrl: 'Ofek.png', width: 2.8, height: 3.36 },
+             // --- ADDED PLAYERS START ---
+             { name: 'Oleksandr', imageUrl: 'Oleksandr.png', width: 2.8, height: 3.36 },
+             { name: 'Ernest', imageUrl: 'Ernest.png', width: 2.8, height: 3.36 },
+             // --- ADDED PLAYERS END ---
              { name: 'Default', imageUrl: null, width: 2.2, height: 2.2 } // Fallback if images fail
         ];
         let selectedCharacterIndex = 0; // Index of the currently selected character
@@ -308,8 +315,16 @@
         let scoreListElement, noScoresMessageElement, finalScoreElement, gameOverReasonElement;
 
         // --- Texture Generation Functions (Procedural textures for variety) ---
+        /**
+         * Creates a simple noise texture programmatically.
+         * @param {number} width - Texture width.
+         * @param {number} height - Texture height.
+         * @param {string} color1 - Base color.
+         * @param {string} color2 - Noise color (used for shade calculation).
+         * @param {number} [alpha=1] - Texture opacity.
+         * @returns {THREE.CanvasTexture} The generated texture.
+         */
         function createNoiseTexture(width, height, color1, color2, alpha = 1) {
-            // Creates a simple noise texture programmatically
             const canvas = document.createElement('canvas');
             canvas.width = width; canvas.height = height;
             const ctx = canvas.getContext('2d');
@@ -329,8 +344,16 @@
             texture.wrapS = texture.wrapT = THREE.RepeatWrapping; // Allow texture tiling
             return texture;
         }
+        /**
+         * Creates a simple tile pattern texture programmatically.
+         * @param {number} width - Texture width.
+         * @param {number} height - Texture height.
+         * @param {string} bgColor - Background color of the tiles.
+         * @param {string} lineColor - Color of the tile lines.
+         * @param {number} tileSize - Size of each tile square.
+         * @returns {THREE.CanvasTexture} The generated texture.
+         */
         function createTileTexture(width, height, bgColor, lineColor, tileSize) {
-            // Creates a simple tile pattern texture programmatically
             const canvas = document.createElement('canvas');
             canvas.width = width; canvas.height = height;
             const ctx = canvas.getContext('2d');
@@ -439,7 +462,6 @@
 
                     // --- Pruning Logic: Keep only the top MAX_HIGH_SCORES ---
                     // After adding, check if we exceed the limit and remove the lowest score(s).
-                    // This is slightly less efficient than checking before adding but simpler to implement.
                     const allScoresSnapshot = await highScoresCollection
                         .orderBy('score', 'desc') // Get all scores, highest first
                         .get();
@@ -465,8 +487,11 @@
 
 
         // --- UI State Management ---
+        /**
+         * Hides all overlays and shows the specified one.
+         * @param {HTMLElement | null} overlayElement - The overlay element to show, or null to hide all.
+         */
         function showOverlay(overlayElement) {
-            // Hides all overlays then shows the specified one
             mainMenuElement.classList.add('hidden');
             scoreboardScreenElement.classList.add('hidden');
             gameOverElement.classList.add('hidden');
@@ -477,24 +502,31 @@
         }
 
         // --- Character Selection Logic ---
+        /**
+         * Updates the selected character index and UI.
+         * @param {number} index - The index of the character to select in the CHARACTERS array.
+         */
         function selectCharacter(index) {
-            // Updates the selected character index and UI
             if (index >= 0 && index < CHARACTERS.length) {
                 selectedCharacterIndex = index;
                 updateCharacterButtonSelection();
                 console.log(`Selected character: ${CHARACTERS[selectedCharacterIndex].name}`);
             }
         }
+        /**
+         * Updates the visual style of character buttons based on the current selection.
+         */
         function updateCharacterButtonSelection() {
-            // Updates the visual style of character buttons based on selection
             const buttons = characterButtonsElement.querySelectorAll('.char-button');
             buttons.forEach((button, index) => {
                 if (index === selectedCharacterIndex) button.classList.add('selected');
                 else button.classList.remove('selected');
             });
         }
+        /**
+         * Creates buttons for each character defined in CHARACTERS array and adds them to the menu.
+         */
         function populateCharacterButtons() {
-            // Creates buttons for each character defined in CHARACTERS array
              characterButtonsElement.innerHTML = ''; // Clear existing buttons
              CHARACTERS.forEach((char, index) => {
                  const button = document.createElement('button');
@@ -507,8 +539,10 @@
         }
 
         // --- Preload Assets & Generate Materials ---
+        /**
+         * Loads textures and creates materials before the game starts.
+         */
         function preloadAssets() {
-            // Loads textures and creates materials before the game starts
             console.log("Preloading assets...");
             let maxAnisotropy = renderer ? renderer.capabilities.getMaxAnisotropy() : 1; // For sharper textures at angles
 
@@ -526,27 +560,27 @@
                         (err) => console.error(`Failed to load character texture: ${char.name} (${char.imageUrl})`, err) // Error callback
                     );
                 }
-             });
+            });
 
              // Load obstacle textures
              obstacleTextures = {};
              for (const typeKey in OBSTACLE_IMAGES) {
-                const images = OBSTACLE_IMAGES[typeKey];
-                obstacleTextures[typeKey] = {};
-                const loadCallback = (texture) => { texture.magFilter = THREE.NearestFilter; texture.anisotropy = maxAnisotropy; texture.needsUpdate = true; };
-                const errorCallback = (imgUrl) => (err) => console.error(`Failed to load obstacle texture: ${typeKey} (${imgUrl})`, err);
+                 const images = OBSTACLE_IMAGES[typeKey];
+                 obstacleTextures[typeKey] = {};
+                 const loadCallback = (texture) => { texture.magFilter = THREE.NearestFilter; texture.anisotropy = maxAnisotropy; texture.needsUpdate = true; };
+                 const errorCallback = (imgUrl) => (err) => console.error(`Failed to load obstacle texture: ${typeKey} (${imgUrl})`, err);
 
-                if (images.right) {
-                    obstacleTextures[typeKey].right = textureLoader.load(images.right, loadCallback, undefined, errorCallback(images.right));
-                } else { console.warn(`Missing right image for obstacle type: ${typeKey}`); }
+                 if (images.right) {
+                     obstacleTextures[typeKey].right = textureLoader.load(images.right, loadCallback, undefined, errorCallback(images.right));
+                 } else { console.warn(`Missing right image for obstacle type: ${typeKey}`); }
 
-                if (images.left) {
-                    obstacleTextures[typeKey].left = textureLoader.load(images.left, loadCallback, undefined, errorCallback(images.left));
-                } else { // Fallback to right image if left is missing
-                    console.warn(`Missing left image for obstacle type: ${typeKey}, using right image.`);
-                    obstacleTextures[typeKey].left = obstacleTextures[typeKey].right;
-                }
-            }
+                 if (images.left) {
+                     obstacleTextures[typeKey].left = textureLoader.load(images.left, loadCallback, undefined, errorCallback(images.left));
+                 } else { // Fallback to right image if left is missing
+                     console.warn(`Missing left image for obstacle type: ${typeKey}, using right image.`);
+                     obstacleTextures[typeKey].left = obstacleTextures[typeKey].right;
+                 }
+             }
 
             // Generate procedural lane materials
             const carpetTexture = createNoiseTexture(64, 64, '#90EE90', '#3CB371'); // Light green carpet
@@ -572,6 +606,9 @@
         }
 
         // --- Initialization Function ---
+        /**
+         * Sets up the scene, camera, renderer, lighting, event listeners, and initial UI state.
+         */
         function init() {
             // Get references to all necessary DOM elements
             infoElement = document.getElementById('info');
@@ -657,6 +694,9 @@
         }
 
         // --- Game Start Logic ---
+        /**
+         * Resets game state, clears old objects, creates initial elements, and starts the game loop.
+         */
         function startGame() {
             console.log("Starting game...");
             // Reset game state variables
@@ -694,8 +734,11 @@
         }
 
         // --- Clear Game Objects ---
+        /**
+         * Removes all dynamic game objects (lanes, obstacles, player, etc.) from the scene
+         * and resets the corresponding arrays.
+         */
         function clearGameObjects() {
-            // Removes all dynamic game objects (lanes, obstacles, player, etc.) from the scene
             console.log("Clearing game objects...");
 
             // Remove obstacles (and from lanes array)
@@ -738,8 +781,11 @@
         }
 
         // --- Create Player ---
+        /**
+         * Creates the player mesh based on the selected character and adds it to the scene.
+         * Initializes the player's bounding box.
+         */
         function createPlayer() {
-            // Creates the player mesh based on the selected character
             const character = CHARACTERS[selectedCharacterIndex];
             const playerW = character.width;
             const playerH = character.height;
@@ -755,6 +801,7 @@
                     side: THREE.DoubleSide // Visible from both sides
                 });
             } else { // Fallback to a colored box
+                console.warn(`Using default box for character: ${character.name}`);
                 playerGeometry = new THREE.BoxGeometry(playerW, playerH, playerW * 0.8); // Slightly thinner box
                 playerMaterial = new THREE.MeshStandardMaterial({ color: DEFAULT_PLAYER_COLOR, roughness: 0.6 });
             }
@@ -778,8 +825,14 @@
         }
 
         // --- Lane Generation Functions ---
+        /**
+         * Creates a single lane segment (plane) of a given type at a specific Z position,
+         * adds it to the scene, and potentially populates it with obstacles, scenery, or safe spots.
+         * @param {string} type - The type of lane (LANE_TYPES.CARPET, LANE_TYPES.WALKWAY, LANE_TYPES.WATER).
+         * @param {number} zPos - The Z coordinate for the center of the lane.
+         * @returns {object} The lane data object.
+         */
         function createLane(type, zPos) {
-            // Creates a single lane segment (plane) and adds it to the scene
             const laneGeometry = new THREE.PlaneGeometry(laneLength, laneWidth);
             const laneMaterial = laneMaterials[type] || new THREE.MeshStandardMaterial({color: 0xff00ff}); // Fallback material
             let laneData = { mesh: null, type: type, z: zPos, obstacles: [], safeSpots: [] }; // Store lane info
@@ -810,8 +863,10 @@
             lastLaneZ = zPos; // Update the position of the furthest lane
             return laneData;
         }
+        /**
+         * Determines the type of the next lane based on game progress and randomness, then creates it.
+         */
         function generateLane() {
-            // Determines the type of the next lane and creates it
             const nextZ = lastLaneZ - laneWidth; // Calculate Z position for the new lane
             let laneType;
             const canSpawnWater = score >= 40; // Water starts appearing after score 40
@@ -829,8 +884,11 @@
 
             createLane(laneType, nextZ); // Create the lane with the determined type and position
         }
+        /**
+         * Adds floating safe spots (lily pads/platforms) to a water lane.
+         * @param {object} laneData - The data object for the water lane.
+         */
         function addSafeSpotsToLane(laneData) {
-            // Adds floating safe spots (lily pads/platforms) to water lanes
             const numSpots = Math.floor(Math.random() * 3) + 2; // 2 to 4 safe spots per water lane
             const spotWidth = laneWidth * 0.8; // Size relative to lane width
             const spotDepth = laneWidth * 0.8;
@@ -844,7 +902,7 @@
             // Generate possible X positions, avoiding edges slightly
             for (let x = -laneLength / 2 + spotWidth / 2; x <= laneLength / 2 - spotWidth / 2; x += laneWidth) {
                  if (Math.abs(x) < laneLength / 2 - halfPlayerWidthApprox) { // Ensure player fits fully
-                     possiblePositions.push(x);
+                      possiblePositions.push(x);
                  }
             }
 
@@ -853,15 +911,17 @@
             // Select positions for the spots
             const spotPositionsX = possiblePositions.slice(0, numSpots);
 
-            // Ensure a safe spot at x=0 on the first water lane if possible
+            // Ensure a safe spot at x=0 on the first water lane if possible (less crucial now)
+            /*
              if (laneData.z === 0 && !spotPositionsX.includes(0)) {
-                 if (spotPositionsX.length < possiblePositions.length && spotPositionsX.length > 0) {
-                     spotPositionsX.pop(); // Remove one random spot
-                     spotPositionsX.push(0); // Add spot at center
-                 } else if (spotPositionsX.length === 0) {
-                     spotPositionsX.push(0); // Add spot at center if none were chosen
-                 }
+                  if (spotPositionsX.length < possiblePositions.length && spotPositionsX.length > 0) {
+                       spotPositionsX.pop(); // Remove one random spot
+                       spotPositionsX.push(0); // Add spot at center
+                  } else if (spotPositionsX.length === 0) {
+                       spotPositionsX.push(0); // Add spot at center if none were chosen
+                  }
              }
+            */
 
             // Create and add spot meshes
             spotPositionsX.forEach(posX => {
@@ -876,8 +936,12 @@
                 safeSpots.push(spotData); // Add to global safe spots array
             });
         }
+        /**
+         * Creates a segment of the side wall for a given lane's Z position.
+         * @param {number} zPos - The Z coordinate for the wall segment.
+         * @param {number} side - -1 for left side, 1 for right side.
+         */
         function createWallSegment(zPos, side) {
-            // Creates a segment of the side wall for a given lane
             const wallSegmentGeometry = new THREE.BoxGeometry(WALL_THICKNESS, WALL_HEIGHT, laneWidth);
             const wallX = side * (laneLength / 2 + WALL_THICKNESS / 2); // Position at the edge of the lane area
             const wallY = WALL_HEIGHT / 2; // Center vertically
@@ -887,8 +951,11 @@
             scene.add(wallSegmentMesh);
             wallSegments.push({ mesh: wallSegmentMesh, z: zPos }); // Add to wall segments array
         }
+        /**
+         * Adds decorative scenery (desks, plants) randomly to carpet lanes.
+         * @param {object} laneData - The data object for the carpet lane.
+         */
         function addSceneryToLane(laneData) {
-            // Adds decorative scenery (desks, plants) to carpet lanes
             const sceneryType = Math.random() < 0.6 ? 'desk' : 'plant'; // 60% chance desk, 40% plant
             let sceneryMesh;
             const side = Math.random() < 0.5 ? -1 : 1; // Randomly place on left or right side
@@ -924,8 +991,11 @@
             scene.add(sceneryMesh);
             scenery.push(sceneryMesh); // Add to global scenery array
         }
+        /**
+         * Adds moving obstacles (using image planes) to walkway lanes.
+         * @param {object} laneData - The data object for the walkway lane.
+         */
         function addObstaclesToLane(laneData) {
-            // Adds moving obstacles (cars/trains) to walkway lanes
             const maxObstacles = Math.min(3, 1 + Math.floor(score / 15)); // More obstacles as score increases
             const numObstacles = Math.floor(Math.random() * maxObstacles) + 1; // 1 to maxObstacles
             const speedMultiplier = 1 + Math.min(1.5, score / 80); // Speed increases with score
@@ -1000,8 +1070,11 @@
         }
 
         // --- Game Loop ---
+        /**
+         * The main game loop, called every frame using requestAnimationFrame.
+         * Updates game state, moves objects, checks collisions, updates camera, and renders the scene.
+         */
         function animate() {
-            // Main game loop, called every frame
             animationFrameId = requestAnimationFrame(animate); // Request next frame
             const deltaTime = clock.getDelta(); // Time since last frame
 
@@ -1029,9 +1102,9 @@
             } else if (currentGameState === GAME_STATE.GAME_OVER) {
                 // Optional: Add game over animation (e.g., shrink player)
                  if (player && player.scale.x > 0.01) {
-                     player.scale.multiplyScalar(0.9); // Simple shrink effect
+                      player.scale.multiplyScalar(0.9); // Simple shrink effect
                  } else if (player) {
-                     player.scale.set(0,0,0); // Ensure player is fully shrunk
+                      player.scale.set(0,0,0); // Ensure player is fully shrunk
                  }
             }
 
@@ -1040,8 +1113,12 @@
         }
 
         // --- Player Movement Visual Interpolation ---
+        /**
+         * Smoothly interpolates the player's visual mesh position towards the targetPosition,
+         * including a hop effect.
+         * @param {number} deltaTime - Time elapsed since the last frame (not directly used here, relies on clock).
+         */
         function movePlayerVisually(deltaTime) {
-            // Smoothly interpolates player mesh position towards targetPosition
             if (!player || !isMoving) return; // Only run if player exists and is moving
 
             const character = CHARACTERS[selectedCharacterIndex];
@@ -1079,8 +1156,11 @@
         }
 
         // --- Obstacle Movement ---
+        /**
+         * Moves obstacles horizontally based on their speed and direction, wrapping them around the screen edges.
+         * Updates obstacle bounding boxes.
+         */
         function moveObstacles() {
-            // Moves obstacles horizontally and wraps them around
             const wrapEdge = laneLength / 2 + 5; // Position where obstacles wrap
             obstacles.forEach(obstacle => {
                 let currentSpeed = obstacle.speed; // Could adjust speed here if needed
@@ -1102,8 +1182,10 @@
         }
 
         // --- Camera Update ---
+        /**
+         * Makes the camera smoothly follow the player's position.
+         */
         function updateCamera() {
-            // Makes the camera follow the player smoothly
             if (!player) return;
 
             // Target position slightly behind and above the player
@@ -1129,9 +1211,11 @@
         }
 
         // --- Shadow Camera Update ---
+        /**
+         * Adjusts the directional light's shadow camera frustum to follow the player,
+         * optimizing shadow rendering by focusing the shadow map area.
+         */
         function updateShadowCamera() {
-            // Adjusts the directional light's shadow camera frustum to follow the player
-            // This optimizes shadow rendering by focusing the shadow map area
             if (!player || !directionalLight || !directionalLight.shadow) return;
 
             const shadowCam = directionalLight.shadow.camera;
@@ -1157,8 +1241,11 @@
 
 
         // --- Collision Detection ---
+        /**
+         * Checks for collisions between the player and obstacles on the current lane.
+         * Water collision is handled separately in `checkWaterCollision`.
+         */
         function checkCollisions() {
-            // Checks for collisions between the player and obstacles or water
             if (!player || isMoving || currentGameState !== GAME_STATE.PLAYING) {
                 return; // Don't check collisions if player doesn't exist, is moving, or game not playing
             }
@@ -1187,8 +1274,13 @@
         }
 
         // --- Water Collision Check ---
+        /**
+         * Checks if the target position (where player intends to move) is on water without a safe spot.
+         * @param {number} targetZ - The target Z coordinate of the move.
+         * @param {number} targetX - The target X coordinate of the move.
+         * @returns {boolean} `true` if the move is safe, `false` if it results in drowning.
+         */
         function checkWaterCollision(targetZ, targetX) {
-            // Checks if the target position (where player intends to move) is on water without a safe spot
              const targetLane = lanes.find(lane => Math.abs(lane.z - targetZ) < 0.1); // Find the lane at the target Z
 
              if (targetLane && targetLane.type === LANE_TYPES.WATER) {
@@ -1204,9 +1296,9 @@
                  let isSafe = false;
                  // Check intersection with all safe spots on that lane
                  targetLane.safeSpots.forEach(spot => {
-                     if (spot.boundingBox && targetPlayerBox.intersectsBox(spot.boundingBox)) {
-                         isSafe = true; // Found an overlapping safe spot
-                     }
+                      if (spot.boundingBox && targetPlayerBox.intersectsBox(spot.boundingBox)) {
+                           isSafe = true; // Found an overlapping safe spot
+                      }
                  });
 
                  if (!isSafe) {
@@ -1221,8 +1313,11 @@
 
 
         // --- Environment Cleanup ---
+        /**
+         * Removes lanes, obstacles, scenery, and wall segments that are far behind the player
+         * to improve performance.
+         */
         function cleanupEnvironment() {
-            // Removes lanes, obstacles, scenery, etc., that are far behind the player
             const cleanupThresholdZ = (player ? player.position.z : 0) + (cleanupBuffer * laneWidth); // Z position threshold
 
             // Filter lanes
@@ -1275,8 +1370,12 @@
         }
 
         // --- Keyboard Controls ---
+        /**
+         * Handles player movement input via arrow keys or WASD.
+         * Checks boundaries and water collision before initiating a move.
+         * @param {KeyboardEvent} event - The keydown event object.
+         */
         function onKeyDown(event) {
-            // Handles player movement input
             if (currentGameState !== GAME_STATE.PLAYING || isMoving) return; // Ignore input if not playing or already moving
 
             let moved = false;
@@ -1345,8 +1444,11 @@
         }
 
         // --- Game Over Logic ---
+        /**
+         * Handles the game over sequence: sets state, displays score, shows overlay, and saves score.
+         * @param {string} [reason="collision"] - The reason for game over ('collision', 'drowned', 'idle').
+         */
         function triggerGameOver(reason = "collision") {
-            // Handles the game over sequence
             if (currentGameState !== GAME_STATE.PLAYING) return; // Prevent multiple game overs
 
             currentGameState = GAME_STATE.GAME_OVER;
@@ -1366,8 +1468,10 @@
         }
 
         // --- Go To Menu ---
+        /**
+         * Switches game state to Menu and shows the main menu overlay.
+         */
         function goToMenu() {
-            // Switches game state to Menu and shows the main menu overlay
             currentGameState = GAME_STATE.MENU;
             showOverlay(mainMenuElement);
             // Optional: Reset camera to default menu view if needed
@@ -1376,8 +1480,10 @@
         }
 
         // --- Window Resize Handler ---
+        /**
+         * Updates camera aspect ratio and renderer size on window resize event.
+         */
         function onWindowResize() {
-            // Updates camera aspect ratio and renderer size on window resize
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix(); // Important after changing aspect ratio
             renderer.setSize(window.innerWidth, window.innerHeight);
